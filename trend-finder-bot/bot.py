@@ -41,6 +41,8 @@ from aiogram.types import (
 )
 from aiogram.client.default import DefaultBotProperties
 
+from site_generator import generate_premium_site
+
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════
@@ -3395,24 +3397,42 @@ async def send_items_batch(
 # ZIP CREATION — Writes to /tmp/ (v9.2 fix for Render)
 # ═══════════════════════════════════════════════════════════════════
 
-def create_site_zip(html_content: str, project_name: str) -> str:
+def create_site_zip(
+    html_content: str,
+    project_name: str,
+    css_content: str = "",
+    js_content: str = "",
+) -> str:
     """Create a ZIP file on disk at /tmp/ and return the path.
+
+    If css_content and js_content are provided, creates a multi-file structure:
+      site/index.html, site/css/styles.css, site/js/script.js
+    Otherwise creates a single-file structure (backward compat):
+      site/index.html
 
     The caller is responsible for deleting the temp file after use.
     """
     safe_name = project_name.lower().replace(" ", "-").replace("/", "-")[:50]
-    tmp_path = os.path.join(tempfile.gettempdir(), f"{safe_name}-landing.zip")
+    tmp_path = os.path.join(tempfile.gettempdir(), f"{safe_name}-site.zip")
 
     with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(f"{safe_name}/index.html", html_content)
+        if css_content and js_content:
+            # Multi-file structure
+            zf.writestr(f"{safe_name}/index.html", html_content)
+            zf.writestr(f"{safe_name}/css/styles.css", css_content)
+            zf.writestr(f"{safe_name}/js/script.js", js_content)
+        else:
+            # Single-file fallback (backward compat)
+            zf.writestr(f"{safe_name}/index.html", html_content)
+
         zf.writestr(
             f"{safe_name}/README.txt",
-            f"Improved Landing Page: {project_name}\n"
+            f"Premium Website: {project_name}\n"
             f"{'=' * 40}\n\n"
             f"1. Open index.html in any modern browser\n"
-            f"2. Or upload to any hosting (Netlify, Vercel, GitHub Pages)\n"
-            f"3. The page is fully standalone — no dependencies needed\n"
-            f"4. All CSS and JS are inline — works offline via file://\n",
+            f"2. Or upload to hosting (Netlify, Vercel, GitHub Pages)\n"
+            f"3. Fully responsive — works on mobile and desktop\n"
+            f"4. All interactions work: FAQ accordion, burger menu, smooth scroll\n",
         )
 
     logger.info(f"[ZIP] Created: {tmp_path} ({os.path.getsize(tmp_path)} bytes)")
@@ -3856,7 +3876,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
             f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
             f"✅ Шаг 1/4: Анализ сайта\n"
             f"✅ Шаг 2/4: AI-анализ готов\n"
-            f"⏳ Шаг 3/4: Создаю лендинг (AI + дизайн тема)..."
+            f"⏳ Шаг 3/4: Создаю премиальный сайт..."
         )
     except Exception:
         pass
@@ -3865,7 +3885,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
     theme = get_theme_for_project(imp_name)
     logger.info(f"[Improve] Theme: {theme['name']} for {imp_name}")
 
-    # ─── Step 7: Generate landing page ───
+    # ─── Step 7: Generate premium website ───
     project_info = {
         "improved_name": imp_name,
         "improved_description": imp_desc,
@@ -3874,21 +3894,21 @@ async def callback_improve(callback: CallbackQuery) -> None:
         "improved_link": imp_link,
     }
 
-    landing_prompt = build_landing_page_prompt(project_info, theme, site_analysis, category=category)
-    html_content = await ask_ai_html(
-        landing_prompt,
-        f"Build a stunning landing page for {imp_name}. "
-        f"Theme: {theme['name']}. Make it production-ready.",
+    html_content, css_content, js_content = generate_premium_site(
+        name=imp_name,
+        description=imp_desc,
+        killer_feature=killer,
+        analysis=analysis,
+        category=category,
+        site_analysis=site_analysis,
+    )
+    logger.info(
+        f"[Improve] Premium site generated: HTML={len(html_content)}, "
+        f"CSS={len(css_content)}, JS={len(js_content)}"
     )
 
-    if not html_content:
-        logger.warning(
-            f"[Improve] AI landing page failed, using fallback for {imp_name}"
-        )
-        html_content = generate_fallback_html(imp_name, imp_desc, killer)
-
-    # ─── Step 8: Create ZIP on disk ───
-    tmp_path = create_site_zip(html_content, imp_name)
+    # ─── Step 8: Create multi-file ZIP on disk ───
+    tmp_path = create_site_zip(html_content, imp_name, css_content, js_content)
 
     # ─── Step 9: Update status ───
     try:
@@ -3896,7 +3916,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
             f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
             f"✅ Шаг 1/4: Анализ сайта\n"
             f"✅ Шаг 2/4: AI-анализ готов\n"
-            f"✅ Шаг 3/4: Лендинг создан (тема: {theme['name']})\n"
+            f"✅ Шаг 3/4: Премиальный сайт создан\n"
             f"⏳ Шаг 4/4: Отправка файлов..."
         )
     except Exception:
