@@ -556,6 +556,54 @@ async def _fetch_coingecko_fast() -> list[dict]:
     return list(all_coins.values())[:15]
 
 
+CRYPTO_REQUIRED_NICHES = [
+    "AI", "DePIN", "RWA", "Bitcoin DeFi", "GameFi", "SocialFi", "L2/L3",
+]
+
+NICHE_ALIASES: dict[str, str] = {
+    # normalize AI model niche labels to canonical names
+    "ai agents": "AI", "ai": "AI", "artificial intelligence": "AI",
+    "ai-agents": "AI", "ai agents": "AI",
+    "depin": "DePIN", "de-pin": "DePIN", "decentralized infrastructure": "DePIN",
+    "rwa": "RWA", "real world assets": "RWA", "real-world assets": "RWA", "tokenization": "RWA",
+    "bitcoin defi": "Bitcoin DeFi", "btc defi": "Bitcoin DeFi", "btc l2": "Bitcoin DeFi", "bitcoin l2": "Bitcoin DeFi",
+    "gamefi": "GameFi", "gaming": "GameFi", "game": "GameFi", "blockchain gaming": "GameFi",
+    "socialfi": "SocialFi", "social": "SocialFi", "decentralized social": "SocialFi", "social network": "SocialFi",
+    "l2": "L2/L3", "l3": "L2/L3", "l2/l3": "L2/L3", "layer 2": "L2/L3", "layer 3": "L2/L3",
+    "desci": "DeSci", "decentralized science": "DeSci",
+    "modular": "L2/L3", "modular blockchain": "L2/L3",
+}
+
+
+def _normalize_niche(raw: str) -> str:
+    """Normalize a niche label to one of CRYPTO_REQUIRED_NICHES."""
+    if not raw:
+        return ""
+    low = raw.strip().lower()
+    if low in NICHE_ALIASES:
+        return NICHE_ALIASES[low]
+    # brute-force substring match
+    for key, canonical in NICHE_ALIASES.items():
+        if key in low or low in key:
+            return canonical
+    return raw.strip()  # return as-is if unknown
+
+
+def _dedup_by_niche(items: list[dict], max_per_niche: int = 1) -> list[dict]:
+    """Keep at most *max_per_niche* items per niche (first seen wins)."""
+    seen: dict[str, int] = {}
+    result = []
+    for item in items:
+        niche = _normalize_niche(item.get("niche", ""))
+        if not niche:
+            continue
+        if seen.get(niche, 0) >= max_per_niche:
+            continue
+        seen[niche] = seen.get(niche, 0) + 1
+        result.append(item)
+    return result
+
+
 async def search_crypto_deep() -> list[dict]:
     """Main crypto search: CoinGecko (fast, 12s) → AI enrichment (20s) → fallback.
 
@@ -564,6 +612,8 @@ async def search_crypto_deep() -> list[dict]:
     2. Enrich with Gemini (has Google Search grounding for real-time data)
     3. If AI fails, use CoinGecko data with basic enrichment
     4. If CoinGecko fails, use deep niche fallback (rotated pool)
+
+    CRITICAL: All returned items are deduplicated — at most 1 project per niche.
     """
     # ─── Step 1: Fast concurrent CoinGecko fetch ───
     all_coins = await _fetch_coingecko_fast()
@@ -577,27 +627,46 @@ async def search_crypto_deep() -> list[dict]:
             for c in all_coins[:12]
         )
 
-        enrich_prompt = f"""You are a deep niche crypto analyst. For each coin below, provide:
-- niche: one of AI, DePIN, RWA, L2/L3, DeSci, GameFi, SocialFi, Bitcoin DeFi, Modular
-- why_hyping: 1-2 sentences WHY it is trending right now (specific: TVL growth %, partnership, launch, funding)
-- what_does: 1-2 sentences what the project actually does
+        enrich_prompt = f"""You are a deep niche crypto analyst. I need exactly 6 crypto projects, each from a DIFFERENT niche. The niches MUST be:
+1. AI (AI agents, AI trading, on-chain AI)
+2. DePIN (decentralized physical infrastructure)
+3. RWA (tokenization of real-world assets, T-Bills, real estate on-chain)
+4. Bitcoin DeFi / BTC L2 (staking, restaking, L2 on Bitcoin)
+5. GameFi (blockchain gaming with real economy)
+6. SocialFi (decentralized social networks, tokenized social)
+Optional 7th: L2/L3 with hype (new rollups, modular blockchains)
+
+For each project provide:
+- name: Project Name (TICKER)
+- niche: exact string from the list above (AI / DePIN / RWA / Bitcoin DeFi / GameFi / SocialFi / L2/L3)
+- what_does: 1 sentence what the project does
+- why_hyping: 1 sentence WHY it's trending NOW (specific: TVL growth %, listing, mainnet, partnership)
 - link: official website URL
 
-Coins:
+Available coins from CoinGecko:
 {coins_text}
 
-IMPORTANT: Only include projects from DEEP NICHES. Skip generic/top-50 CMC coins.
-Return JSON array with exactly 8 projects:
-[{{"name":"CoinName (TICKER)","niche":"AI","why_hyping":"...","what_does":"...","link":"https://..."}}]
+STRICT RULES:
+- Each niche must appear AT MOST ONCE. No duplicates.
+- Skip generic top-50 CMC coins like ETH, SOL, BNB.
+- Prefer deep niche / emerging projects.
+- If you can't find a project for a niche, skip that niche — do NOT reuse a niche.
+
+Return JSON array:
+[{{"name":"...","niche":"AI","what_does":"...","why_hyping":"...","link":"https://..."}}]
 Return ONLY JSON."""
 
         try:
             enriched = await asyncio.wait_for(ask_ai_list(enrich_prompt), timeout=20)
             if enriched and len(enriched) >= 3:
-                valid = [item for item in enriched if all(item.get(k) for k in ("name", "niche", "why_hyping", "link"))]
-                if len(valid) >= 3:
-                    logger.info(f"[CryptoSearch] AI enriched {len(valid)} projects")
-                    return valid[:8]
+                valid = [item for item in enriched if all(item.get(k) for k in ("name", "niche", "what_does", "why_hyping", "link"))]
+                # Normalize niche names
+                for item in valid:
+                    item["niche"] = _normalize_niche(item["niche"])
+                deduped = _dedup_by_niche(valid, max_per_niche=1)
+                if len(deduped) >= 3:
+                    logger.info(f"[CryptoSearch] AI enriched {len(deduped)} unique-niche projects (from {len(valid)} raw)")
+                    return deduped[:7]
         except asyncio.TimeoutError:
             logger.warning("[CryptoSearch] AI enrichment timed out")
 
@@ -608,21 +677,37 @@ Return ONLY JSON."""
         slug_to_niche["decentralized-science-desci"] = "DeSci"
 
         result = []
-        for coin in all_coins[:8]:
+        for coin in all_coins[:12]:
             change = coin.get("price_change_7d")
-            niche = slug_to_niche.get(coin.get("category", ""), "Crypto")
+            niche = slug_to_niche.get(coin.get("category", ""), "")
+            if not niche:
+                continue
             result.append({
                 "name": f"{coin['name']} ({coin['symbol']})",
                 "niche": niche,
-                "why_hyping": f"Рост объёмов торгов. 7d: {change:+.1f}%" if change else "Активный рост объёмов на DEX.",
                 "what_does": f"Протокол в нише {niche} — развивающаяся DeFi-инфраструктура с реальным продуктом.",
+                "why_hyping": f"Рост объёмов торгов. 7d: {change:+.1f}%" if change else "Активный рост объёмов на DEX.",
                 "link": f"https://www.coingecko.com/en/coins/{coin['id']}",
             })
-        return result
+        deduped = _dedup_by_niche(result, max_per_niche=1)
+        if deduped:
+            logger.info(f"[CryptoSearch] CoinGecko basic: {len(deduped)} unique-niche projects (from {len(result)} raw)")
+            return deduped[:7]
 
     # ─── Step 4: CoinGecko failed → rotated deep niche fallback ───
     logger.warning("[CryptoSearch] CoinGecko failed, using rotated fallback")
-    return random.choice(FALLBACK_CRYPTO_POOLS)
+    pool = random.choice(FALLBACK_CRYPTO_POOLS)
+    deduped = _dedup_by_niche(pool, max_per_niche=1)
+    if len(deduped) < 4:
+        # If this pool has duplicates, try other pools and merge
+        all_unique = dict()  # niche -> item
+        for p in FALLBACK_CRYPTO_POOLS:
+            for item in p:
+                niche = _normalize_niche(item.get("niche", ""))
+                if niche and niche not in all_unique:
+                    all_unique[niche] = item
+        deduped = list(all_unique.values())[:7]
+    return deduped
 
 
 async def search_stores_deep() -> list[dict]:
@@ -1628,7 +1713,7 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
 FALLBACK_CRYPTO: list[dict] = []  # Kept for compat; use FALLBACK_CRYPTO_POOLS instead
 
 FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
-    # ── Pool 1: AI + DePIN + Bitcoin DeFi ──
+    # ── Pool 1: all 7 niches unique ──
     [
         {
             "name": "Spectral (SPEC)",
@@ -1644,19 +1729,6 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
             "link": "https://spectral.finance",
         },
         {
-            "name": "Virtuals Protocol (VIRTUAL)",
-            "niche": "AI",
-            "why_hyping": (
-                "AI-агенты с токенизацией на Base — самый хайповый narrative 2025. "
-                "Капитализация с $50M до $2B+ за 3 месяца. AIXBT — вирусный инфлюенсер."
-            ),
-            "what_does": (
-                "Создание, токенизация и монетизация AI-агентов. Каждый агент — "
-                "автономная сущность с токеном, взаимодействующая в соцсетях и DeFi."
-            ),
-            "link": "https://virtuals.io",
-        },
-        {
             "name": "Hivemapper (HONEY)",
             "niche": "DePIN",
             "why_hyping": (
@@ -1668,19 +1740,6 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
                 "Токены HONEY за каждый километр. Данные продаются компаниям."
             ),
             "link": "https://hivemapper.com",
-        },
-        {
-            "name": "Babylon (BABY)",
-            "niche": "Bitcoin DeFi",
-            "why_hyping": (
-                "Bitcoin staking для безопасности PoS-сетей — $5B+ BTC застейкано. "
-                "Партнёрства с 50+ L2/L1 проектами."
-            ),
-            "what_does": (
-                "Владельцы BTC стейкают биткоины для обеспечения безопасности "
-                "PoS-сетей, не покидая Bitcoin L1."
-            ),
-            "link": "https://babylonlabs.io",
         },
         {
             "name": "Midas (MIDAS)",
@@ -1696,6 +1755,45 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
             "link": "https://midas.app",
         },
         {
+            "name": "Babylon (BABY)",
+            "niche": "Bitcoin DeFi",
+            "why_hyping": (
+                "Bitcoin staking для безопасности PoS-сетей — $5B+ BTC застейкано. "
+                "Партнёрства с 50+ L2/L1 проектами."
+            ),
+            "what_does": (
+                "Владельцы BTC стейкают биткоины для обеспечения безопасности "
+                "PoS-сетей, не покидая Bitcoin L1."
+            ),
+            "link": "https://babylonlabs.io",
+        },
+        {
+            "name": "Illuvium (ILV)",
+            "niche": "GameFi",
+            "why_hyping": (
+                "AAA-качество auto-battler RPG на Immutable X. "
+                "$100M+ привлечено. Первый реальный GameFi с графикой уровня AAA."
+            ),
+            "what_does": (
+                "Blockchain RPG с auto-battler механикой и collectible NFT-персонажами. "
+                "Полная игровая экономика с land, crafting, PVP."
+            ),
+            "link": "https://illuvium.io",
+        },
+        {
+            "name": "Friend.tech (FRIEND)",
+            "niche": "SocialFi",
+            "why_hyping": (
+                "Возрождение на Base — токенизированные соцсети. "
+                "Перенос на Base привлек 500K+ юзеров. Новый сезон с улучшенной экономикой."
+            ),
+            "what_does": (
+                "Децентрализованная соцсеть: profile-bound токены для создателей. "
+                "Чаты, tipping, exclusive content — всё on-chain."
+            ),
+            "link": "https://www.friend.tech",
+        },
+        {
             "name": "Mode Network (MODE)",
             "niche": "L2/L3",
             "why_hyping": (
@@ -1707,6 +1805,22 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
                 "распределяются между протоколами, привлекающими пользователей."
             ),
             "link": "https://mode.network",
+        },
+    ],
+    # ── Pool 2: all 7 niches unique (different projects) ──
+    [
+        {
+            "name": "Virtuals Protocol (VIRTUAL)",
+            "niche": "AI",
+            "why_hyping": (
+                "AI-агенты с токенизацией на Base — самый хайповый narrative 2025. "
+                "Капитализация с $50M до $2B+ за 3 месяца. AIXBT — вирусный инфлюенсер."
+            ),
+            "what_does": (
+                "Создание, токенизация и монетизация AI-агентов. Каждый агент — "
+                "автономная сущность с токеном, взаимодействующая в соцсетях и DeFi."
+            ),
+            "link": "https://virtuals.io",
         },
         {
             "name": "Aethir (ATH)",
@@ -1722,22 +1836,6 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
             "link": "https://www.aethir.com",
         },
         {
-            "name": "Molecule (MOLEC)",
-            "niche": "DeSci",
-            "why_hyping": (
-                "БиоDAO — децентрализованное финансирование науки через IP-NFT. "
-                "$20M+ для исследований онкологии и долголетия."
-            ),
-            "what_does": (
-                "Создаёт биоDAO для исследований. IP-NFT позволяет сообществам "
-                "совместно владеть результатами научных исследований."
-            ),
-            "link": "https://molecule.to",
-        },
-    ],
-    # ── Pool 2: RWA + DeSci + new L2/L3 ──
-    [
-        {
             "name": "OpenEden (TBILL)",
             "niche": "RWA",
             "why_hyping": (
@@ -1749,32 +1847,6 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
                 "векселей США на Ethereum и Mantle."
             ),
             "link": "https://www.openeden.com",
-        },
-        {
-            "name": "Centrifuge (CFG)",
-            "niche": "RWA",
-            "why_hyping": (
-                "Крупнейшая DeFi-платформа для реальных активов — $200M+ TVL. "
-                "Токенизирует кредиты, недвижимость и инвойсы."
-            ),
-            "what_does": (
-                "Liquidity pool для RWA: реальные активы (кредиты, недвижимость) "
-                "становятся collateral в DeFi-протоколах."
-            ),
-            "link": "https://centrifuge.io",
-        },
-        {
-            "name": "Blast (BLAST)",
-            "niche": "L2/L3",
-            "why_hyping": (
-                "L2 с native yield на ETH и USDB. $2B+ TVL на аирдроп. "
-                "Parrots — самый популярный DApp в экосистеме."
-            ),
-            "what_does": (
-                "Optimistic Rollup на Ethereum с автоматическим yield для ETH и "
-                "стейблкоинов. Аэрдроп $BLAST — один из крупнейших в 2024."
-            ),
-            "link": "https://blast.io",
         },
         {
             "name": "BounceBit (BB)",
@@ -1790,75 +1862,6 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
             "link": "https://bouncebit.io",
         },
         {
-            "name": "Degen Chain",
-            "niche": "L2/L3",
-            "why_hyping": (
-                "L3 на Arbitrum Orbit для degen-трейдинга. Degen token — "
-                "главный token of Base ecosystem. Переносит memecoin trading on-chain."
-            ),
-            "what_does": (
-                "Супер-быстрая L3 для memecoin-трейдинга с минимальными комиссиями. "
-                "Социальный протокол с tip-культурой."
-            ),
-            "link": "https://degen.mirror.xyz",
-        },
-        {
-            "name": "VitaDAO (VITA)",
-            "niche": "DeSci",
-            "why_hyping": (
-                "Крупнейший биоDAO с $5M+ на исследования долголетия. "
-                "Финансирует Stanford, Oxford. Токен вырос на 300%."
-            ),
-            "what_does": (
-                "Децентрализованная DAO для финансирования долголетия. "
-                "IP-NFT для интеллектуальной собственности в биотехе."
-            ),
-            "link": "https://vita.mirror.xyz",
-        },
-        {
-            "name": "Wayfinder (FIND)",
-            "niche": "AI",
-            "why_hyping": (
-                "AI-навигатор Web3 — автономные агенты, которые находят лучший "
-                "путь для DeFi-операций. Рост пользовательской базы 500% за месяц."
-            ),
-            "what_does": (
-                "AI-протокол, который создаёт автономных агентов-помощников для "
-                "Web3: навигация по DeFi, yield-оптимизация, cross-chain мосты."
-            ),
-            "link": "https://wayfinder.ai",
-        },
-        {
-            "name": "Natix Network (NATIX)",
-            "niche": "DePIN",
-            "why_hyping": (
-                "Камеры смартфонов как датчики для физического мира. 100K+ "
-                "участников. Контракты с городскими муниципалитетами."
-            ),
-            "what_does": (
-                "DePIN-сеть, где смартфоны с камерами собирают данные о трафике, "
-                "парковке, пешеходах. Токен NATIX за данные."
-            ),
-            "link": "https://www.natix.network",
-        },
-    ],
-    # ── Pool 3: GameFi + SocialFi + Modular ──
-    [
-        {
-            "name": "Illuvium (ILV)",
-            "niche": "GameFi",
-            "why_hyping": (
-                "AAA-качество auto-battler RPG на Immutable X. "
-                "$100M+ привлечено. Полная игра (не просто P2E) — "
-                "первый реальный GameFi с графикой уровня AAA."
-            ),
-            "what_does": (
-                "Blockchain RPG с auto-battler механикой и collectible NFT-персонажами. "
-                "Полная игровая экономика с land, crafting, PVP."
-            ),
-            "link": "https://illuvium.io",
-        },
-        {
             "name": "Pixels (PIXEL)",
             "niche": "GameFi",
             "why_hyping": (
@@ -1872,44 +1875,34 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
             "link": "https://pixels.xyz",
         },
         {
-            "name": "Friend.tech 2.0 (FRIEND)",
+            "name": "Farcaster",
             "niche": "SocialFi",
             "why_hyping": (
-                "Возрождение на Base — токенизированные соцсети. "
-                "Новый сезон с улучшенной экономикой. Перенос на Base привлек 500K+ юзеров."
+                "Децентрализованный Twitter на Ethereum. 500K+ MAU. "
+                "Frames — viral feature для встроенных mini-apps. Warps привлёк $150M."
             ),
             "what_does": (
-                "Децентрализованная соцсеть: profile-bound токены для создателей. "
-                "Чаты, tipping, exclusive content — всё on-chain."
+                "Децентрализованная социальная сеть с open protocol. "
+                "Frames позволяют создавать интерактивные мини-приложения в постах."
             ),
-            "link": "https://www.friend.tech",
+            "link": "https://farcaster.xyz",
         },
         {
-            "name": "Story Protocol (IP)",
-            "niche": "Modular",
+            "name": "Blast (BLAST)",
+            "niche": "L2/L3",
             "why_hyping": (
-                "IP-инфраструктура для AI — токенизация лицензий на контент. "
-                "$134M funding. Решает проблему прав для AI-контента."
+                "L2 с native yield на ETH и USDB. $2B+ TVL на аирдроп. "
+                "Parrots — самый популярный DApp в экосистеме."
             ),
             "what_does": (
-                "Блокчейн для управления интеллектуальной собственностью. "
-                "AI-модели могут лицензировать контент через смарт-контракты."
+                "Optimistic Rollup на Ethereum с автоматическим yield для ETH и "
+                "стейблкоинов. Аэрдроп $BLAST — один из крупнейших в 2024."
             ),
-            "link": "https://www.storyprotocol.xyz",
+            "link": "https://blast.io",
         },
-        {
-            "name": "EigenLayer (EIGEN)",
-            "niche": "Modular",
-            "why_hyping": (
-                "Restaking-протокол на Ethereum — $15B+ TVL. "
-                "Позволяет переиспользовать ETH для безопасности множества сетей."
-            ),
-            "what_does": (
-                "Restaking на Ethereum: стейкеры могут переиспользовать "
-                "свой ETH для обеспечения новых AVS (Active Validation Services)."
-            ),
-            "link": "https://www.eigenlayer.xyz",
-        },
+    ],
+    # ── Pool 3: all 7 niches unique (more different projects) ──
+    [
         {
             "name": "Sona (SONA)",
             "niche": "AI",
@@ -1937,17 +1930,69 @@ FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
             "link": "https://app.getgrass.io",
         },
         {
-            "name": "OriginTrail (TRAC)",
+            "name": "Centrifuge (CFG)",
             "niche": "RWA",
             "why_hyping": (
-                "Supply chain DePIN — трекинг товаров через V6 protocol. "
-                "Граф знаний для supply chain. Используют Samsung и Л'Ореаль."
+                "Крупнейшая DeFi-платформа для реальных активов — $200M+ TVL. "
+                "Токенизирует кредиты, недвижимость и инвойсы."
             ),
             "what_does": (
-                "Децентрализованный граф знаний для supply chain: "
-                "происхождение товаров, сертификаты, compliance — всё on-chain."
+                "Liquidity pool для RWA: реальные активы (кредиты, недвижимость) "
+                "становятся collateral в DeFi-протоколах."
             ),
-            "link": "https://origintrail.io",
+            "link": "https://centrifuge.io",
+        },
+        {
+            "name": "Lombard Staked BTC (LBTC)",
+            "niche": "Bitcoin DeFi",
+            "why_hyping": (
+                "Liquid staking Bitcoin — LBTC используется как collateral в DeFi. "
+                "TVL $1B+. Интеграция с Aave, Compound, Uniswap."
+            ),
+            "what_does": (
+                "Протокол liquid staking для Bitcoin: стейкаешь BTC, получаешь LBTC, "
+                "который можно использовать в DeFi-протоколах на Ethereum."
+            ),
+            "link": "https://lombard.finance",
+        },
+        {
+            "name": "Shrapnel (SHRAP)",
+            "niche": "GameFi",
+            "why_hyping": (
+                "AAA FPS на Avalanche — extraction shooter с NFT-лутом. "
+                "$40M+ финансирование. Открытый бета-тест привлек 1M+ игроков."
+            ),
+            "what_does": (
+                "Competitive FPS с реальной экономикой: NFT-оружие, карты, скины. "
+                "Игроки создают контент и продают его на маркетплейсе."
+            ),
+            "link": "https://shrapnel.com",
+        },
+        {
+            "name": "Lens Protocol",
+            "niche": "SocialFi",
+            "why_hyping": (
+                "Social graph на Polygon — Aave-команда. 500K+ профилей. "
+                "Open social graph для Web3: любой может строить соцсети поверх Lens."
+            ),
+            "what_does": (
+                "Децентрализованный social graph: профиль, подписки, контент — всё NFT. "
+                "Разработчики строят фронты поверх открытого протокола."
+            ),
+            "link": "https://lens.xyz",
+        },
+        {
+            "name": "Mantle (MNT)",
+            "niche": "L2/L3",
+            "why_hyping": (
+                "L2 на OP Stack с $1B+ TVL. Mantle Treasury управляет $3B+. "
+                "mETH Protocol — liquid staking с интеграцией в DeFi."
+            ),
+            "what_does": (
+                "Optimistic Rollup L2 с модульной архитектурой: DA-слой (EigenDA), "
+                "execution, staking. Один из крупнейших L2 по TVL."
+            ),
+            "link": "https://mantle.xyz",
         },
     ],
 ]
