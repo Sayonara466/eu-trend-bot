@@ -1,0 +1,13 @@
+name = "eu-trend-bot"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# KV Namespace for persistent storage (trends, user state)
+# After first deploy, get the namespace ID and uncomment:
+# kv_namespaces = [
+#   { binding = "KV", id = "YOUR_KV_NAMESPACE_ID" }
+# ]
+
+# Cron trigger: runs daily at 06:00 UTC (09:00 MSK)
+[triggers]
+crons = ["0 6 * * *"]

@@ -1,0 +1,17 @@
+{
+  "name": "eu-trend-analyzer-bot",
+  "version": "1.0.0",
+  "description": "Telegram бот для ежедневной аналитики набирающих популярность товаров и услуг в Европе",
+  "main": "bot-cron.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "cron": "node bot-cron.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "node-cron": "^3.0.3",
+    "z-ai-web-dev-sdk": "latest"
+  }
+}
