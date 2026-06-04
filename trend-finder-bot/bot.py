@@ -1093,6 +1093,102 @@ IMPROVE_PROMPTS: dict[str, str] = {
     "companies": PROMPT_IMPROVE_COMPANIES,
 }
 
+# Category labels for display
+CATEGORY_LABELS: dict[str, str] = {
+    "stores": "Магазин",
+    "crypto": "Крипто-проект",
+    "companies": "Компания / Стартап",
+}
+
+
+async def detect_category(name: str, desc: str, link: str) -> str:
+    """Use AI to determine the category of a project.
+
+    Returns one of: "stores", "crypto", "companies".
+    Falls back to the button category if AI fails.
+    """
+    # ─── Heuristic fast check (no AI needed) ───
+    desc_lower = desc.lower()
+    link_lower = link.lower()
+    name_lower = name.lower()
+
+    # Crypto signals
+    crypto_keywords = [
+        "token", "defi", "blockchain", "web3", "nft", "crypto", "tvl",
+        "smart contract", "dao", "staking", "yield", "liquidity",
+        "depin", "rwa", "layer-2", "l2", "l3", "rollup", "consensus",
+        "coin", "tokenomics", "dex", "ceex", "amm", "bridge",
+    ]
+    crypto_tlds = [".io", ".xyz", ".network", ".protocol", ".fi", ".finance", ".eth", ".sol", ".chain"]
+    crypto_symbols = re.findall(r"\([A-Z]{2,6}\)", name)  # ticker like (SPEC), (VIRTUAL)
+
+    # Store/brand signals
+    store_keywords = [
+        "fashion", "clothing", "brand", "boutique", "womenswear", "menswear",
+        "streetwear", "sneakers", "accessories", "collection", "apparel",
+        "sustainable fashion", "designer", "шоп", "одежда", "мода",
+        "style", "luxury", "ready-to-wear", "rtw", "couture", "runway",
+        "silhouette", "fabric", "sewing", "textile", "knitwear",
+    ]
+    store_tlds = [".com", ".store", ".fashion", ".shop", ".co", ".fr", ".dk", ".se"]
+
+    # Score each category
+    scores = {"crypto": 0, "stores": 0, "companies": 0}
+
+    for kw in crypto_keywords:
+        if kw in desc_lower:
+            scores["crypto"] += 2
+    for tld in crypto_tlds:
+        if link_lower.endswith(tld) or f".{tld}" in link_lower:
+            scores["crypto"] += 2
+    if crypto_symbols:
+        scores["crypto"] += 3
+    # Ticker-like patterns in name
+    if re.search(r"\([A-Z]{2,6}\)", name):
+        scores["crypto"] += 3
+
+    for kw in store_keywords:
+        if kw in desc_lower:
+            scores["stores"] += 2
+    for tld in store_tlds:
+        if link_lower.endswith(tld):
+            scores["stores"] += 1
+
+    # If heuristic gives clear signal (gap of 3+), use it
+    max_score = max(scores.values())
+    if max_score >= 4:
+        best = max(scores, key=scores.get)
+        if scores[best] - min(scores.values()) >= 2:
+            logger.info(f"[DetectCat] Heuristic: {best} (scores: {scores})")
+            return best
+
+    # ─── AI fallback for ambiguous cases ───
+    classify_prompt = f"""Classify this project into EXACTLY ONE category.
+
+Project: {name}
+Description: {desc[:300]}
+Website: {link}
+
+Categories:
+- "stores" — Fashion brands, clothing stores, lifestyle brands, DTC brands, boutiques, e-commerce brands
+- "crypto" — Crypto projects, DeFi protocols, blockchain platforms, Web3 apps, token projects, DAOs
+- "companies" — Tech startups, SaaS companies, biotech, defense tech, AI companies, enterprise software
+
+Return ONLY ONE WORD: stores, crypto, or companies. Nothing else."""
+
+    try:
+        result = await asyncio.wait_for(ask_openrouter(classify_prompt, ""), timeout=15)
+        if result:
+            detected = result.strip().lower().strip('"').strip("'")
+            if detected in ("stores", "crypto", "companies"):
+                logger.info(f"[DetectCat] AI classified as: {detected}")
+                return detected
+    except Exception as e:
+        logger.warning(f"[DetectCat] AI failed: {e}")
+
+    # Fallback: return None (caller will use button category)
+    return ""
+
 
 # ═══════════════════════════════════════════════════════════════════
 # LANDING PAGE PROMPTS — CATEGORY-SPECIFIC SECTIONS
@@ -3340,12 +3436,17 @@ def cleanup_zip(tmp_path: str) -> None:
 def build_analysis_message(
     name: str,
     analysis: dict,
+    category: str = "",
 ) -> tuple[str, str]:
     """Build the full analysis text message.
 
     Returns (markdown_text, plain_text) — plain_text is used as fallback
     if Markdown parsing fails.
     """
+
+    # ── Category tag as first line ──
+    cat_label = CATEGORY_LABELS.get(category, "")
+    cat_tag = f"🏷 *{cat_label}*\n\n" if cat_label else ""
 
     imp_name = analysis.get("improved_name", f"Neo{name}")
     imp_desc = analysis.get("improved_description", "")
@@ -3426,6 +3527,7 @@ def build_analysis_message(
 
     # ── Full message ──
     md_text = (
+        f"{cat_tag}"
         f"🚀 *{imp_name}*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💡 *Улучшенная версия:* {name}\n\n"
@@ -3679,10 +3781,23 @@ async def callback_improve(callback: CallbackQuery) -> None:
         f"category={category} index={index} name={name}"
     )
 
-    # ─── Step 1: Send "generating" status ───
+    # ─── Step 1: Detect/confirm category ───
+    detected = await detect_category(name, desc, link)
+    if detected:
+        if detected != category:
+            logger.info(
+                f"[Improve] Category overridden: button={category} → detected={detected}"
+            )
+        category = detected
+    else:
+        logger.info(f"[Improve] Category detection failed, using button: {category}")
+
+    cat_label = CATEGORY_LABELS.get(category, "Проект")
+
+    # ─── Step 2: Send "generating" status ───
     status_msg = await safe_send_message(
         chat_id,
-        f"🔥 *Генерирую улучшенный оффер для: {name}*\n\n"
+        f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
         f"⏳ Шаг 1/4: Анализ оригинального сайта...",
     )
     if not status_msg:
@@ -3702,9 +3817,9 @@ async def callback_improve(callback: CallbackQuery) -> None:
     # ─── Step 3: Update status ───
     try:
         await status_msg.edit_text(
-            f"🔥 *Генерирую улучшенный оффер для: {name}*\n\n"
+            f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
             f"{'✅' if site_analysis else '⏭️'} Шаг 1/4: "
-            f"{'Анализ сайта — готов' if site_analysis else 'Анализ сайта — пропущен (не удалось загрузить)'}\n"
+            f"{'Анализ сайта — готов' if site_analysis else 'Анализ сайта — пропущен'}\n"
             f"⏳ Шаг 2/4: AI-анализ концепции + GEO + ключевые слова..."
         )
     except Exception:
@@ -3738,7 +3853,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
     # ─── Step 5: Update status ───
     try:
         await status_msg.edit_text(
-            f"🔥 *Генерирую улучшенный оффер для: {name}*\n\n"
+            f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
             f"✅ Шаг 1/4: Анализ сайта\n"
             f"✅ Шаг 2/4: AI-анализ готов\n"
             f"⏳ Шаг 3/4: Создаю лендинг (AI + дизайн тема)..."
@@ -3778,7 +3893,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
     # ─── Step 9: Update status ───
     try:
         await status_msg.edit_text(
-            f"🔥 *Генерирую улучшенный оффер для: {name}*\n\n"
+            f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
             f"✅ Шаг 1/4: Анализ сайта\n"
             f"✅ Шаг 2/4: AI-анализ готов\n"
             f"✅ Шаг 3/4: Лендинг создан (тема: {theme['name']})\n"
@@ -3788,7 +3903,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
         pass
 
     # ─── Step 10: Send analysis message ───
-    md_text, plain_text = build_analysis_message(name, analysis)
+    md_text, plain_text = build_analysis_message(name, analysis, category=category)
 
     try:
         await safe_send_message(chat_id, md_text)
@@ -3825,7 +3940,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
     # ─── Step 12: Final status update ───
     try:
         await status_msg.edit_text(
-            f"✅ *Полный пакет для {imp_name} готов!*\n\n"
+            f"🏷 *{cat_label}* | ✅ *{imp_name} — готов!*\n\n"
             f"📊 Анализ + GEO + Ключевые слова — выше\n"
             f"📦 Готовый сайт (тема: {theme['name']}) — в архиве\n\n"
             f"💡 Нажми кнопку ещё раз для нового варианта!"
