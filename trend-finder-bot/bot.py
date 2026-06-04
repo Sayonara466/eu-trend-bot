@@ -3405,31 +3405,21 @@ def create_site_zip(
 ) -> str:
     """Create a ZIP file on disk at /tmp/ and return the path.
 
-    If css_content and js_content are provided, creates a multi-file structure:
-      site/index.html, site/css/styles.css, site/js/script.js
-    Otherwise creates a single-file structure (backward compat):
-      site/index.html
-
+    The ZIP contains a single self-contained index.html (CSS + JS inlined).
     The caller is responsible for deleting the temp file after use.
     """
     safe_name = project_name.lower().replace(" ", "-").replace("/", "-")[:50]
     tmp_path = os.path.join(tempfile.gettempdir(), f"{safe_name}-site.zip")
 
     with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        if css_content and js_content:
-            # Multi-file structure
-            zf.writestr(f"{safe_name}/index.html", html_content)
-            zf.writestr(f"{safe_name}/css/styles.css", css_content)
-            zf.writestr(f"{safe_name}/js/script.js", js_content)
-        else:
-            # Single-file fallback (backward compat)
-            zf.writestr(f"{safe_name}/index.html", html_content)
-
+        # Always write a single self-contained index.html at the ZIP root
+        # CSS and JS are now inlined inside the HTML (no external files)
+        zf.writestr("index.html", html_content)
         zf.writestr(
-            f"{safe_name}/README.txt",
+            "README.txt",
             f"Premium Website: {project_name}\n"
             f"{'=' * 40}\n\n"
-            f"1. Open index.html in any modern browser\n"
+            f"1. Extract the ZIP and open index.html in any modern browser\n"
             f"2. Fully responsive — works on mobile and desktop\n"
             f"3. All interactions work: FAQ accordion, burger menu, smooth scroll, modal\n"
             f"4. Premium dark theme with glassmorphism effects\n",

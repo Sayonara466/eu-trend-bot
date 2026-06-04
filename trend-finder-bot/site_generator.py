@@ -843,7 +843,8 @@ window.addEventListener('scroll', function() {
 
 # ──────────────────────── HTML Generator ────────────────────────
 
-def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict) -> str:
+def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
+                 css_content: str = "", js_content: str = "") -> str:
     a = analysis or {}
     name = _s(a.get("improved_name", a.get("name", "Project")))
     desc = _s(a.get("improved_description", a.get("description", "")))
@@ -951,7 +952,9 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict) 
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="css/styles.css">
+  <style>
+{css_content}
+  </style>
 </head>
 <body>
 
@@ -1126,7 +1129,9 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict) 
     </div>
   </div>
 
-  <script src="js/script.js"></script>
+  <script>
+{js_content}
+  </script>
 </body>
 </html>"""
 
@@ -1163,6 +1168,8 @@ def generate_premium_site(
 
     css = _generate_css(t, category)
     js = _generate_js(t, category)
-    html = _generate_html(t, category, a, site_analysis or {})
+    # Inline CSS and JS directly into the HTML — single self-contained file
+    html = _generate_html(t, category, a, site_analysis or {},
+                         css_content=css, js_content=js)
 
-    return html, css, js
+    return html, "", ""
