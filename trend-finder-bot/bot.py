@@ -3430,9 +3430,9 @@ def create_site_zip(
             f"Premium Website: {project_name}\n"
             f"{'=' * 40}\n\n"
             f"1. Open index.html in any modern browser\n"
-            f"2. Or upload to hosting (Netlify, Vercel, GitHub Pages)\n"
-            f"3. Fully responsive — works on mobile and desktop\n"
-            f"4. All interactions work: FAQ accordion, burger menu, smooth scroll\n",
+            f"2. Fully responsive — works on mobile and desktop\n"
+            f"3. All interactions work: FAQ accordion, burger menu, smooth scroll, modal\n"
+            f"4. Premium dark theme with glassmorphism effects\n",
         )
 
     logger.info(f"[ZIP] Created: {tmp_path} ({os.path.getsize(tmp_path)} bytes)")
@@ -3934,15 +3934,14 @@ async def callback_improve(callback: CallbackQuery) -> None:
     # ─── Step 11: Send ZIP document ───
     safe_file_name = imp_name.lower().replace(" ", "-")[:50]
     try:
-        document = FSInputFile(tmp_path, filename=f"{safe_file_name}-landing.zip")
+        document = FSInputFile(tmp_path, filename=f"{safe_file_name}-site.zip")
         sent = await safe_send_document(
             chat_id,
             document,
             caption=(
-                f"📦 *{imp_name} — Готовый лендинг*\n\n"
-                f"🎨 Дизайн тема: {theme['name']}\n"
-                f"Разархивируй → открой index.html в браузере\n"
-                f"Или залей на Netlify / Vercel / GitHub Pages"
+                f"📦 *{imp_name} — Готовый сайт*\n\n"
+                f"🎨 Дизайн: премиальная тёмная тема\n"
+                f"Разархивируй → открой index.html в браузере"
             ),
         )
         if sent:
@@ -3962,7 +3961,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
         await status_msg.edit_text(
             f"🏷 *{cat_label}* | ✅ *{imp_name} — готов!*\n\n"
             f"📊 Анализ + GEO + Ключевые слова — выше\n"
-            f"📦 Готовый сайт (тема: {theme['name']}) — в архиве\n\n"
+            f"📦 Готовый сайт (тёмная тема, glassmorphism) — в архиве\n\n"
             f"💡 Нажми кнопку ещё раз для нового варианта!"
         )
     except Exception:
