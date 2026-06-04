@@ -86,3 +86,30 @@ Stage Summary:
 - Gemini AI with 3-model fallback + curated fallback data
 - Deployed on Render: https://eu-trend-bot.onrender.com
 - New service ID: srv-d8f9tac2m8qs73e1gho0
+
+---
+Task ID: 1
+Agent: main
+Task: Fix two critical problems with crypto button: (1) search hanging, (2) generic projects
+
+Work Log:
+- Read entire bot.py (3320 lines v13.0) to understand crypto handler flow
+- Identified root cause: OpenRouter timeout was 120s × 8 models = up to 16 minutes of hanging
+- Identified generic projects: fallback contained Solana, Phantom, Render Network etc.
+- Added CoinGecko API integration (free, no key): /search/trending + /coins/markets by category
+- Added search_crypto_deep() function with 4-layer fallback: CoinGecko → AI enrichment → CoinGecko basic → hardcoded niche fallback
+- Reduced OpenRouter timeout from 120s to 25s, limited to 4 models max
+- Replaced FALLBACK_CRYPTO with 8 deep niche projects: Spectral, Virtuals Protocol, Hivemapper, Babylon, Midas, Mode Network, Aethir, Molecule
+- Rewrote PROMPT_CRYPTO with strict forbidden list and niche-specific format
+- Added crypto-specific message format: niche tag + emoji, why hyping, what it does
+- Updated build_item_message() with category parameter for crypto format
+- Updated handle_category_message() with dedicated crypto search path
+- Cleaned git history (removed download/ dir with secrets via filter-branch)
+- Pushed to GitHub, triggered Render deploy → live
+
+Stage Summary:
+- Bot v14.0 deployed at https://eu-trend-bot.onrender.com/health
+- Crypto search now: CoinGecko API (fast, 15s) → AI enrichment → niche fallback
+- OpenRouter: 25s timeout, max 4 models (was 120s × 8 models)
+- Deep niche fallback: AI🤖, DePIN📡, RWA🏦, L2/L3⚡, DeSci🔬, GameFi🎮, Bitcoin DeFi₿
+- Each crypto item shows: name, niche, why trending, what it does, official link
