@@ -1,20 +1,19 @@
 """
-EU Trend Analytics Bot v14.0 — Deep Niche Crypto + Category-Specific Offers
+EU Trend Analytics Bot v15.0 — Deep Niche All Categories
 ==========================================================================
 AI-powered trend discovery with "Improved Offer" feature:
-  1. Trendy European fashion brands
-  2. Trending crypto projects (DEEP NICHE: AI-крипта, DePIN, RWA, L2, DeSci, Bitcoin DeFi)
-  3. Hot startups & companies
+  1. Trendy fashion brands (niche, viral, emerging — NOT mainstream)
+  2. Trending crypto projects (DEEP NICHE: AI, DePIN, RWA, L2/L3, DeSci, Bitcoin DeFi)
+  3. Hot startups & companies (Series A-C, pre-IPO — NOT Fortune 500)
 
-v14.0 CHANGES:
-  - Crypto search: CoinGecko API (primary) → AI enrichment (Gemini+Search) → deep niche fallback
-  - OpenRouter timeout reduced to 25s (prevents hanging)
-  - Crypto format: niche tag, why hyping, what it does, official link
-  - NO generic/popular projects — only deep niche from: AI-crypto, DePIN, RWA, new L2/L3,
-    DeSci, GameFi, SocialFi, Bitcoin DeFi, modular blockchains
-
-AI Provider: OpenRouter (free models, 25s timeout) + Gemini (Google Search grounding)
-Landing Pages: 6 design themes x 3 category-specific layouts
+v15.0 CHANGES:
+  - ALL 3 categories now use dedicated deep search functions
+  - Crypto: concurrent CoinGecko API (12s) → AI enrichment (20s) → rotated fallback
+  - Stores/Companies: AI (25s timeout) → rotated fallback pools
+  - Overall timeout: 40 seconds maximum (never hangs!)
+  - 3 fallback pools per category with random rotation (24 unique items each)
+  - Stricter AI prompts: forbidden lists, niche-first requirements
+  - Fallback descriptions in Russian for user clarity
 """
 
 import asyncio
@@ -529,112 +528,145 @@ NICHE_CATEGORY_MAP = {
 }
 
 
+async def _fetch_coingecko_fast() -> list[dict]:
+    """Concurrent CoinGecko fetch: trending + 3 random categories in parallel.
+    Total timeout: 12 seconds for ALL calls combined.
+    """
+    categories_to_try = random.sample(CG_CATEGORIES, min(3, len(CG_CATEGORIES)))
+
+    tasks = [asyncio.create_task(fetch_coingecko_trending())]
+    for slug in categories_to_try:
+        tasks.append(asyncio.create_task(fetch_coingecko_by_category(slug)))
+
+    done, pending = await asyncio.wait(tasks, timeout=12)
+    for p in pending:
+        p.cancel()
+
+    all_coins: dict[str, dict] = {}
+    for t in done:
+        try:
+            coins = t.result()
+            for coin in coins:
+                all_coins[coin["id"]] = coin
+        except Exception:
+            pass
+
+    return list(all_coins.values())[:15]
+
+
 async def search_crypto_deep() -> list[dict]:
-    """Main crypto search: CoinGecko → AI enrichment → deep niche fallback.
+    """Main crypto search: CoinGecko (fast, 12s) → AI enrichment (20s) → fallback.
 
     Strategy:
-    1. Fetch trending from CoinGecko
-    2. Fetch top coins from niche categories (AI, DePIN, RWA, L2, GameFi)
-    3. Deduplicate, pick 8 best
-    4. Enrich descriptions with AI (Gemini w/ Google Search grounding)
-    5. If AI fails, use CoinGecko data with generated descriptions
-    6. If CoinGecko also fails, use hardcoded deep niche fallback
+    1. Concurrent CoinGecko fetch: trending + 3 random categories (12s timeout)
+    2. Enrich with Gemini (has Google Search grounding for real-time data)
+    3. If AI fails, use CoinGecko data with basic enrichment
+    4. If CoinGecko fails, use deep niche fallback (rotated pool)
     """
-    # ─── Step 1: Fetch from CoinGecko ───
-    all_coins: dict[str, dict] = {}
-
-    # Trending coins
-    trending = await fetch_coingecko_trending()
-    for coin in trending:
-        all_coins[coin["id"]] = coin
-
-    # Category coins (try 3 random categories for variety)
-    categories_to_try = random.sample(CG_CATEGORIES, min(3, len(CG_CATEGORIES)))
-    for cat_slug in categories_to_try:
-        cat_coins = await fetch_coingecko_by_category(cat_slug)
-        for coin in cat_coins:
-            if coin["id"] not in all_coins:
-                all_coins[coin["id"]] = coin
+    # ─── Step 1: Fast concurrent CoinGecko fetch ───
+    all_coins = await _fetch_coingecko_fast()
 
     if all_coins:
         logger.info(f"[CryptoSearch] CoinGecko returned {len(all_coins)} unique coins")
 
-        # Pick top 12 (prioritize trending, then by market cap)
-        coin_list = list(all_coins.values())[:12]
-
-        # ─── Step 2: Enrich with AI ───
+        # ─── Step 2: Enrich with AI (20s timeout) ───
         coins_text = "\n".join(
-            f"- {c['name']} ({c['symbol']}) — market_cap_rank: {c.get('market_cap_rank', 'N/A')}"
-            for c in coin_list
+            f"- {c['name']} ({c['symbol']}) — rank: {c.get('market_cap_rank', 'N/A')}"
+            for c in all_coins[:12]
         )
 
         enrich_prompt = f"""You are a deep niche crypto analyst. For each coin below, provide:
 - niche: one of AI, DePIN, RWA, L2/L3, DeSci, GameFi, SocialFi, Bitcoin DeFi, Modular
-- why_hyping: 1-2 sentences WHY it is trending right now
+- why_hyping: 1-2 sentences WHY it is trending right now (specific: TVL growth %, partnership, launch, funding)
 - what_does: 1-2 sentences what the project actually does
 - link: official website URL
 
 Coins:
 {coins_text}
 
-IMPORTANT: Only include projects that are truly trending and from deep niches. 
-Skip any that are generic or top-50 CMC coins.
+IMPORTANT: Only include projects from DEEP NICHES. Skip generic/top-50 CMC coins.
+Return JSON array with exactly 8 projects:
+[{{"name":"CoinName (TICKER)","niche":"AI","why_hyping":"...","what_does":"...","link":"https://..."}}]
+Return ONLY JSON."""
 
-Return JSON array:
-[{{"name":"CoinName (TICKER)","niche":"AI","why_hyping":"...","what_does":"...","link":"https://official-site.com"}}]
+        try:
+            enriched = await asyncio.wait_for(ask_ai_list(enrich_prompt), timeout=20)
+            if enriched and len(enriched) >= 3:
+                valid = [item for item in enriched if all(item.get(k) for k in ("name", "niche", "why_hyping", "link"))]
+                if len(valid) >= 3:
+                    logger.info(f"[CryptoSearch] AI enriched {len(valid)} projects")
+                    return valid[:8]
+        except asyncio.TimeoutError:
+            logger.warning("[CryptoSearch] AI enrichment timed out")
 
-Return ONLY the JSON array with exactly 8 projects."""
-
-        enriched = await ask_ai_list(enrich_prompt)
-        if enriched and len(enriched) >= 3:
-            logger.info(f"[CryptoSearch] AI enriched {len(enriched)} projects")
-            valid = []
-            for item in enriched:
-                if item.get("name") and item.get("niche") and item.get("why_hyping") and item.get("link"):
-                    valid.append(item)
-            if len(valid) >= 3:
-                return valid[:8]
-
-        # ─── Step 3: Fallback — use CoinGecko data with basic enrichment ───
-        logger.info("[CryptoSearch] AI enrichment failed, building from CoinGecko data")
-        result = []
-        # Map category slug to nice name
+        # ─── Step 3: CoinGecko data with basic enrichment ───
+        logger.info("[CryptoSearch] AI failed, building from CoinGecko data")
         slug_to_niche = {v: k for k, v in NICHE_CATEGORY_MAP.items()}
         slug_to_niche["layer-2"] = "L2/L3"
         slug_to_niche["decentralized-science-desci"] = "DeSci"
 
-        # Track which coins came from which categories
-        coin_categories: dict[str, str] = {}
-        # For simplicity, assign niche based on the category we fetched them from
-        seen_ids = set()
-        for cat_slug in categories_to_try:
-            nice_niche = slug_to_niche.get(cat_slug, "Crypto")
-            try:
-                cat_coins = await fetch_coingecko_by_category(cat_slug)
-            except Exception:
-                cat_coins = []
-            for coin in cat_coins:
-                if coin["id"] not in seen_ids:
-                    coin_categories[coin["id"]] = nice_niche
-                    seen_ids.add(coin["id"])
-
-        for coin in coin_list[:8]:
-            niche = coin_categories.get(coin["id"], "Crypto")
+        result = []
+        for coin in all_coins[:8]:
+            change = coin.get("price_change_7d")
+            niche = slug_to_niche.get(coin.get("category", ""), "Crypto")
             result.append({
                 "name": f"{coin['name']} ({coin['symbol']})",
                 "niche": niche,
-                "why_hyping": (
-                    f"Активный рост объёмов торгов. "
-                    f"Market Cap Rank: #{coin.get('market_cap_rank', 'N/A')}."
-                ),
-                "what_does": f"Крипто-проект в нише {niche} — активно растущий протокол с реальной технологией.",
+                "why_hyping": f"Рост объёмов торгов. 7d: {change:+.1f}%" if change else "Активный рост объёмов на DEX.",
+                "what_does": f"Протокол в нише {niche} — развивающаяся DeFi-инфраструктура с реальным продуктом.",
                 "link": f"https://www.coingecko.com/en/coins/{coin['id']}",
             })
         return result
 
-    # ─── Step 4: CoinGecko failed entirely → use deep niche fallback ───
-    logger.warning("[CryptoSearch] CoinGecko failed, using deep niche fallback")
-    return FALLBACK_CRYPTO
+    # ─── Step 4: CoinGecko failed → rotated deep niche fallback ───
+    logger.warning("[CryptoSearch] CoinGecko failed, using rotated fallback")
+    return random.choice(FALLBACK_CRYPTO_POOLS)
+
+
+async def search_stores_deep() -> list[dict]:
+    """Search for trending niche European stores/brands.
+
+    Strategy:
+    1. Ask AI with strict niche prompt (25s timeout)
+    2. If AI fails, use rotated fallback pools
+    """
+    try:
+        items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=25)
+        if items and len(items) >= 3:
+            valid = [item for item in items if all(item.get(k) for k in ("name", "style", "link"))]
+            if len(valid) >= 3:
+                logger.info(f"[StoresSearch] AI returned {len(valid)} brands")
+                return valid[:8]
+    except asyncio.TimeoutError:
+        logger.warning("[StoresSearch] AI timed out")
+    except Exception as e:
+        logger.warning(f"[StoresSearch] AI error: {e}")
+
+    logger.warning("[StoresSearch] Using rotated fallback")
+    return random.choice(FALLBACK_STORES_POOLS)
+
+
+async def search_companies_deep() -> list[dict]:
+    """Search for trending niche startups/companies.
+
+    Strategy:
+    1. Ask AI with strict niche prompt (25s timeout)
+    2. If AI fails, use rotated fallback pools
+    """
+    try:
+        items = await asyncio.wait_for(ask_ai_list(PROMPT_COMPANIES), timeout=25)
+        if items and len(items) >= 3:
+            valid = [item for item in items if all(item.get(k) for k in ("name", "description", "link"))]
+            if len(valid) >= 3:
+                logger.info(f"[CompaniesSearch] AI returned {len(valid)} companies")
+                return valid[:8]
+    except asyncio.TimeoutError:
+        logger.warning("[CompaniesSearch] AI timed out")
+    except Exception as e:
+        logger.warning(f"[CompaniesSearch] AI error: {e}")
+
+    logger.warning("[CompaniesSearch] Using rotated fallback")
+    return random.choice(FALLBACK_COMPANIES_POOLS)
 
 
 async def ask_ai_json(system_prompt: str, user_text: str) -> dict | None:
@@ -806,69 +838,79 @@ async def analyze_original_site(url: str) -> dict:
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_STORES = """You are a European fashion trend expert. List the TOP 8 most trendy, hyped, stylish European fashion brands and boutiques (2025-2026 era).
+PROMPT_STORES = """You are a European fashion trend expert who finds brands BEFORE they go mainstream. List the TOP 8 most trendy, VIRAL, FASTEST-GROWING fashion brands globally (2025-2026 era).
 
-These must be COOL, INDEPENDENT, HYPE brands — NOT mass market chains. Think: Scandinavian minimalism, Parisian chic, sustainable fashion, streetwear going mainstream, luxury casual, indie labels.
+CRITICAL: These must be NICHE, EMERGING, VIRAL brands — NOT established mainstream labels.
+Think: TikTok viral brands, DTC startups, Instagram-famous indie labels, emerging designers.
 
-DO NOT just copy these examples — include FRESH brands beyond these:
-Samsøe Samsøe, ARKET, GANNI, Weekday, COS, & Other Stories, A.P.C., Sézane, Veja, NA-KD, By Far, Gestuz, Baum und Pferdgarten, Sandqvist, Rotate, Marni, Jacquemus.
+EMERGING BRAND EXAMPLES (find brands LIKE these, NOT these exact ones):
+House of Sunny, Cult Gaia, Nagnata, Diotima, Gimaguas, Sleeper, Rouje, Coperni, Nanushka,
+Reformation, Farm Rio, Aligne, Alaia, Acne Studios, MM6 Maison Margiela, Roksanda
 
-STRICTLY DO NOT include: H&M, Zara, Mango, Uniqlo, Decathlon, Primark, C&A, Nike mainline, Adidas mainline.
+STRICTLY FORBIDDEN (DO NOT include ANY of these):
+H&M, Zara, Mango, Uniqlo, Primark, C&A, Nike, Adidas, Gucci, Prada, LV, Chanel, Dior,
+GANNI, ARKET, COS, & Other Stories, A.P.C., Sezane, Veja, By Far, Samsoe Samsoe,
+Sandro, Maje, Massimo Dutti, Ralph Lauren, Tommy Hilfiger, Calvin Klein.
 
 For each brand provide EXACTLY these fields:
 - name: brand name
-- style: 2-3 catchy sentences about the brand's aesthetic, vibe, and why it's trending
+- style: 2-3 catchy sentences about WHY this brand is viral RIGHT NOW and what makes it unique
 - link: EXACT URL to the official website
 - country: country of origin
 
-IMPORTANT: Use your knowledge of real European fashion brands. Include both well-known trendy brands and emerging ones.
+Return ONLY a valid JSON array of exactly 8 brands, nothing else.
+Format: [{"name":"BrandName","style":"...","link":"https://www.brand.com","country":"Country"}]"""
 
-Return ONLY a valid JSON array of exactly 8 brands, nothing else:
-[{\"name\":\"GANNI\",\"style\":\"...\",\"link\":\"https://www.ganni.com\",\"country\":\"Denmark\"}]"""
+PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream.
 
-PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream. Your knowledge cutoff is April 2025.
-
-CRITICAL: You must find projects from THESE specific niches — NOT generic/popular ones:
-1. AI + Crypto: AI agents on-chain, tokenized AI models, AI-powered trading, speculative AI for smart contracts
-2. DePIN (Decentralized Physical Infrastructure): GPU clouds, mapping networks, sensor data, telecom DePIN
-3. RWA (Real World Assets): tokenized treasuries, real estate on-chain, credit protocols, institutional DeFi
-4. New L2/L3: Base ecosystem, Blast, Mode Network, Degen Chain, emerging rollups — NOT Arbitrum/Optimism
+CRITICAL: Find projects from THESE specific niches ONLY:
+1. AI + Crypto: AI agents on-chain, tokenized AI models, AI-powered trading
+2. DePIN: GPU clouds, mapping networks, sensor data, telecom DePIN
+3. RWA (Real World Assets): tokenized treasuries, real estate on-chain, credit protocols
+4. New L2/L3: Base ecosystem, Blast, Mode Network, Degen Chain, emerging rollups
 5. DeSci (Decentralized Science): bioDAOs, IP-NFTs, research funding on-chain
 6. Bitcoin DeFi: BTC L2, restaking, Babylon, Merlin Chain, BounceBit
-7. GameFi with real economics: not just P2E but full virtual economies
+7. GameFi: full virtual economies with real economics
 8. SocialFi: decentralized social, tokenized content, creator economies
 
 STRICTLY FORBIDDEN (DO NOT include these or any similarly popular coins):
 Bitcoin, Ethereum, Solana, BNB, XRP, Cardano, Avalanche, Polkadot, Chainlink, Polygon,
-Uniswap, Aave, MakerDAO, Phantom, MetaMask, Render Network, io.net, Monad, Ondo Finance,
+Uniswap, Aave, MakerDAO, Render Network, io.net, Monad, Ondo Finance,
 Berachain, Pepe, any meme coins, any top-50 CMC coins.
 
 For each project provide EXACTLY these fields:
 - "name": project name and ticker in parentheses, e.g. "Spectral (SPEC)"
 - "niche": one of: AI, DePIN, RWA, L2/L3, DeSci, GameFi, SocialFi, Bitcoin DeFi, Modular
-- "why_hyping": 1-2 specific sentences explaining WHY it is trending RIGHT NOW (growth TVL %, mainnet launch, listing, fund investment, partnership)
-- "what_does": 1-2 sentences explaining the actual technology/product
+- "why_hyping": 1-2 specific sentences WHY it is trending RIGHT NOW (TVL growth, mainnet launch, listing, funding, partnership)
+- "what_does": 1-2 sentences about the actual technology/product
 - "link": EXACT URL to the official website
 
 Return ONLY a valid JSON array of exactly 8 projects:
 [{"name":"Spectral (SPEC)","niche":"AI","why_hyping":"...","what_does":"...","link":"https://spectral.finance"}]"""
 
-PROMPT_COMPANIES = """You are a technology and business startup analyst. List the TOP 8 most hyped, rapidly growing startups and companies in Europe and globally (2025-2026 era).
+PROMPT_COMPANIES = """You are a technology and business startup analyst. List the TOP 8 most hyped, RAPIDLY GROWING startups and companies globally (2025-2026 era).
 
-SECTORS: foodtech, biotech, fintech, logistics, AI, green tech, EV, space, cyber, robotics, healthtech, climate tech, quantum, semiconductor.
+CRITICAL: Find REAL STARTUPS and fast-growing tech companies — NOT established giants.
+Focus on: Series A-C startups, pre-IPO companies, recently IPO'd tech, companies with explosive growth.
 
-STRICTLY DO NOT include: Apple, Google, Microsoft, Amazon, Meta, Tesla, Nvidia, OpenAI, Samsung, FAANG/MAMAA, Oracle, SAP, Salesforce.
+SECTORS: AI, defense tech, biotech, fintech, logistics, green tech, EV, robotics,
+healthtech, climate tech, photonics, quantum, semiconductor, space tech, developer tools.
+
+STRICTLY FORBIDDEN (DO NOT include ANY of these):
+Apple, Google, Microsoft, Amazon, Meta, Tesla, Nvidia, OpenAI, Samsung, Oracle, SAP,
+Salesforce, IBM, Intel, AMD, Cisco, Uber, Airbnb, Spotify, Netflix, Stripe, PayPal,
+Shopify, Adobe, ServiceNow, Atlassian, Palantir, Snowflake, Datadog, CrowdStrike.
+
+Also AVOID: Revolut, Klarna, DeepL, Northvolt (too well-known, find FRESHER alternatives).
 
 For each company provide EXACTLY these fields:
 - name: exact official company name
-- description: 2-3 catchy sentences — what the company does AND why it is trending
+- description: 2-3 catchy sentences — what the company does AND why it is trending RIGHT NOW (funding, growth, launch)
 - link: EXACT URL to official website
 - sector: primary business sector
 
-IMPORTANT: Use your knowledge of real companies. Include both well-known trending startups and emerging ones.
-
 Return ONLY a valid JSON array of exactly 8 companies, nothing else:
-[{"name":"Helsing","description":"...","link":"https://helsing.ai","sector":"AI / Defense"}]"""
+[{"name":"Mistral AI","description":"...","link":"https://mistral.ai","sector":"AI / LLM"}]"""
 
 # ═══════════════════════════════════════════════════════════════════
 # IMPROVED OFFER PROMPTS — CATEGORY-SPECIFIC
@@ -1231,287 +1273,837 @@ TECHNICAL REQUIREMENTS:
 # FALLBACK DATA
 # ═══════════════════════════════════════════════════════════════════
 
-FALLBACK_STORES: list[dict] = [
-    {
-        "name": "GANNI",
-        "style": (
-            "Danish sustainable fashion with bold colors and playful prints. "
-            "Every fashion influencer rocks their signature balloon sleeves and "
-            "cheeky graphics. They turned sustainability into the coolest thing "
-            "on the runway."
-        ),
-        "link": "https://www.ganni.com",
-        "country": "Denmark",
-    },
-    {
-        "name": "ARKET",
-        "style": (
-            "Nordic minimalist fashion from H&M Group that feels like a luxury "
-            "concept store. Timeless pieces blending Scandinavian design with "
-            "obsessive focus on quality fabrics."
-        ),
-        "link": "https://www.arket.com",
-        "country": "Sweden",
-    },
-    {
-        "name": "Sézane",
-        "style": (
-            "Parisian-chic womenswear with vintage-inspired silhouettes and a "
-            "cult Instagram following. Each collection is a love letter to "
-            "1970s Paris, reimagined for the modern woman."
-        ),
-        "link": "https://www.sezane.com",
-        "country": "France",
-    },
-    {
-        "name": "COS",
-        "style": (
-            "Premium minimalism with architectural silhouettes and clean lines. "
-            "Every piece feels like a wearable sculpture from a modern art museum."
-        ),
-        "link": "https://www.cos.com",
-        "country": "Sweden",
-    },
-    {
-        "name": "A.P.C.",
-        "style": (
-            "French casual luxury brand with iconic raw denim and understated "
-            "Parisian cool since 1987. The brand fashion insiders wear when "
-            "they want effortless style."
-        ),
-        "link": "https://www.apc.fr",
-        "country": "France",
-    },
-    {
-        "name": "Veja",
-        "style": (
-            "Sustainable sneakers made in Brazil with transparent ethical "
-            "supply chain. Worn by Meghan Markle and Emma Watson, proving "
-            "eco-friendly is the most fashionable choice."
-        ),
-        "link": "https://www.veja-store.com",
-        "country": "France/Brazil",
-    },
-    {
-        "name": "By Far",
-        "style": (
-            "Bulgarian accessories brand with 90s-inspired shoes and bags "
-            "that break the internet every drop. Their Jodie bag is the most "
-            "photographed accessory of the year."
-        ),
-        "link": "https://www.byfar.com",
-        "country": "Bulgaria",
-    },
-    {
-        "name": "Samsøe Samsøe",
-        "style": (
-            "Scandinavian effortless luxury with relaxed tailoring and "
-            "premium materials. Their cashmere sweaters and silk dresses are "
-            "quiet luxury staples every it-girl has."
-        ),
-        "link": "https://www.samskoe-samskoe.com",
-        "country": "Denmark",
-    },
+FALLBACK_STORES: list[dict] = []  # Kept for compat; use FALLBACK_STORES_POOLS instead
+
+FALLBACK_STORES_POOLS: list[list[dict]] = [
+    # ── Pool 1: Scandinavian & Parisian chic ──
+    [
+        {
+            "name": "GANNI",
+            "style": (
+                "Danish sustainable fashion с яркими цветами и игривыми принтами. "
+                "Баллонные рукава и дерзкая графика — фишка бренда. Превратили "
+                "устойчивость в самую модную вещь на подиуме."
+            ),
+            "link": "https://www.ganni.com",
+            "country": "Denmark",
+        },
+        {
+            "name": "Sézane",
+            "style": (
+                "Парижский шик с винтажным кроем и культовым Instagram. "
+                "Каждая коллекция — любовное письмо Парижу 1970-х, "
+                "переосмысленный для современной женщины."
+            ),
+            "link": "https://www.sezane.com",
+            "country": "France",
+        },
+        {
+            "name": "Rouje",
+            "style": (
+                "Бренд Жанны Дамас — квинтэссенция французского girl-next-door стиля. "
+                "Платья-комбинации, кроп-топы и винтажный деним. "
+                "Сериал Emily in Paris сделал бренд мировым хитом."
+            ),
+            "link": "https://www.rouje.com",
+            "country": "France",
+        },
+        {
+            "name": "Rotate",
+            "style": (
+                "Копенгагенский бренд вечерних платьев с туфлями-биноклями. "
+                "Их бирюзовые платья — вирусный хит TikTok. "
+                "Носят Белла Хадид и Кендалл Дженнер."
+            ),
+            "link": "https://rotate.eu",
+            "country": "Denmark",
+        },
+        {
+            "name": "Totême",
+            "style": (
+                "Шведский quiet luxury — минимализм с характером. "
+                "Капсульный гардероб для женщин, которые ценят качество над трендами. "
+                "Слайн Берггрен (экс-политика H&M) основала бренд в Стокгольме."
+            ),
+            "link": "https://www.toteme-studio.com",
+            "country": "Sweden",
+        },
+        {
+            "name": "Lemaire",
+            "style": (
+                "Французский кутюрный минимализм Кристофа Лемера. "
+                "Кожаные сумки Croissant стали культовым аксессуаром 2025. "
+                "Эстетика «тихой роскоши» в чистом виде."
+            ),
+            "link": "https://www.lemaire.fr",
+            "country": "France",
+        },
+        {
+            "name": "Sleeper",
+            "style": (
+                "Украинский бренд одёжки-как-дневной. Пижамные костюмы и "
+                "шелковые платья для улицы. Носит Зендаи и "
+                "Бейонсе. $100M+ revenue в 2024."
+            ),
+            "link": "https://sleeper.com.ua",
+            "country": "Ukraine",
+        },
+        {
+            "name": "Cult Gaia",
+            "style": (
+                "Лос-анджелесский бренд архитектурных аксессуаров. "
+                "Их плетёные сумки Ark — самый фотографировалий аксессуар года. "
+                "Обувь и декор с ар-деко эстетикой."
+            ),
+            "link": "https://www.cultgaia.com",
+            "country": "USA",
+        },
+    ],
+    # ── Pool 2: Emerging streetwear & sustainability ──
+    [
+        {
+            "name": "House of Sunny",
+            "style": (
+                "Лондонский бренд вирусных платьев. Их сарафан Hattie — "
+                "#1 на TikTok в 2025. Яркие принты, 70-е эстетика, "
+                "accessible luxury для Gen Z."
+            ),
+            "link": "https://www.houseofsunny.co.uk",
+            "country": "UK",
+        },
+        {
+            "name": "Farm Rio",
+            "style": (
+                "Бразильский бренд с яркими принтами и устойчивым производством. "
+                "Растёт 60% YoY, открывает магазины по всему миру. "
+                "Эстетика карнавала + eco-conscious."
+            ),
+            "link": "https://www.farmrio.com",
+            "country": "Brazil",
+        },
+        {
+            "name": "Reformation",
+            "style": (
+                "Лос-анджелесский бренд sustainable fashion. "
+                "Отслеживает углеродный след каждого изделия. "
+                "Культизация через Instagram — Waitlist на дропы за часы."
+            ),
+            "link": "https://www.thereformation.com",
+            "country": "USA",
+        },
+        {
+            "name": "Nagnata",
+            "style": (
+                "Австралийский бренд knitwear из переработанного хлопка. "
+                "Технологичная трикотажная одежда с архитектурным кроем. "
+                "Любимцы Vogues Australia и Net-a-Porter."
+            ),
+            "link": "https://www.nagnata.com",
+            "country": "Australia",
+        },
+        {
+            "name": "Gimaguas",
+            "style": (
+                "Испанский boho-chic бренд сестёр Сая и Пилар. "
+                "Вязаные кардиганы, шарфы и шорты с фриволитетом. "
+                "Вирусный хит среди fashion-инфлюенсеров."
+            ),
+            "link": "https://www.gimaguas.com",
+            "country": "Spain",
+        },
+        {
+            "name": "Diotima",
+            "style": (
+                "Ямайский luxury-бренд с афро-карибской эстетикой. "
+                "Ручная работа, ткани из Ямайки. Фаворит Vogue и "
+                "нашла путь на Met Gala 2024."
+            ),
+            "link": "https://www.diotima.co",
+            "country": "Jamaica",
+        },
+        {
+            "name": "Alaïa",
+            "style": (
+                "Тунисский кутюрный дом — кружевное мастерство уровня "
+                "скульптуры. После ребрендинга под Pieter Mulier бренд "
+                "переживает ренессанс с хайпом на Tiber sandals."
+            ),
+            "link": "https://www.alaia.com",
+            "country": "Tunisia/France",
+        },
+        {
+            "name": "Jacquemus",
+            "style": (
+                "Марсельский бренд Симона Порт Жакмюса. Le Chiquito — "
+                "самая популярная мини-сумка мира. Провёл шоу на "
+                "помостах Версальского дворца."
+            ),
+            "link": "https://www.jacquemus.com",
+            "country": "France",
+        },
+    ],
+    # ── Pool 3: European indie & niche ──
+    [
+        {
+            "name": "COS",
+            "style": (
+                "Премиальный минимализм H&M Group с архитектурными силуэтами. "
+                "Каждая вещь — как скульптура из современного музея. "
+                "Коллаборация с Serpentine Gallery."
+            ),
+            "link": "https://www.cos.com",
+            "country": "Sweden",
+        },
+        {
+            "name": "A.P.C.",
+            "style": (
+                "Французский casual-luxury с культовым raw denim с 1987. "
+                "Бренд, который носят fashion-инсайдеры, когда хотят "
+                "эффектного без усилий стиля."
+            ),
+            "link": "https://www.apc.fr",
+            "country": "France",
+        },
+        {
+            "name": "Sandqvist",
+            "style": (
+                "Шведский бренд рюкзаков и аксессуаров из органического "
+                "хлопка и переработанной кожи. Скандинавский "
+                "дизайн + прочность для повседневности."
+            ),
+            "link": "https://www.sandqvist.com",
+            "country": "Sweden",
+        },
+        {
+            "name": "Gestuz",
+            "style": (
+                "Датский бренд с расслабленным скандинавским стилем. "
+                "Их джинсовые комбинезоны и велюровые платья — "
+                "must-have для скандинавских fashion-блогеров."
+            ),
+            "link": "https://www.gestuz.com",
+            "country": "Denmark",
+        },
+        {
+            "name": "Coperni",
+            "style": (
+                "Парижский tech-fashion лейбл. Нанесение жидкого платья "
+                "на Беллу Хадид прямо на шоу. Swipe Bag — "
+                "самый инновационный аксессуар 2025."
+            ),
+            "link": "https://www.coperni.fr",
+            "country": "France",
+        },
+        {
+            "name": "Nanushka",
+            "style": (
+                "Будапештский бренд с болгарскими корнями. Velvet-платья "
+                "и faux fur — вирусные хиты. Культ в Net-a-Porter "
+                "и открывает флагманы в Лондоне и Лос-Анджелесе."
+            ),
+            "link": "https://www.nanushka.com",
+            "country": "Hungary",
+        },
+        {
+            "name": "By Far",
+            "style": (
+                "Болгарский accessories-бренд с 90-ми. Обувь и сумки "
+                "которые ломают интернет каждый дроп. Сумка Jodie — "
+                "самый фотографируемый аксессуар года."
+            ),
+            "link": "https://www.byfar.com",
+            "country": "Bulgaria",
+        },
+        {
+            "name": "Veja",
+            "style": (
+                "Устойчивые кроссовки из Бразилии с прозрачной цепочкой. "
+                "Носит Meghan Markle и Emma Watson — эко-френдли "
+                "как самый модный выбор."
+            ),
+            "link": "https://www.veja-store.com",
+            "country": "France/Brazil",
+        },
+    ],
 ]
 
-FALLBACK_CRYPTO: list[dict] = [
-    {
-        "name": "Spectral (SPEC)",
-        "niche": "AI",
-        "why_hyping": (
-            "Спекулятивный синтаксис для смарт-контрактов — позволяет создавать "
-            "on-chain AI-агентов прямо из промптов. TVL вырос на 400% за последние 30 дней,"
-            " протокол активно интегрируется в DeFi-экосистемы."
-        ),
-        "what_does": (
-            "Платформа для токенизации и синтеза AI-агентов, которые могут "
-            "автономно торговать, анализировать рынки и управлять DeFi-позицими."
-        ),
-        "link": "https://spectral.finance",
-    },
-    {
-        "name": "Virtuals Protocol (VIRTUAL)",
-        "niche": "AI",
-        "why_hyping": (
-            "AI-агенты с токенизацией на Base — самый хайповый narratives 2025. "
-            "Капитализация выросла с $50M до $2B+ за 3 месяца. AI-агент AIXBT "
-            "стал вирусным crypto-инфлюенсером на X/Twitter."
-        ),
-        "what_does": (
-            "Платформа для создания, токенизации и монетизации AI-агентов. "
-            "Каждый агент — это автономная сущность с собственным токеном, "
-            "которая взаимодействует в соцсетях, играх и DeFi."
-        ),
-        "link": "https://virtuals.io",
-    },
-    {
-        "name": "Hivemapper (HONEY)",
-        "niche": "DePIN",
-        "why_hyping": (
-            "Крупнейшая децентрализованная картографическая сеть — 150K+ дэш-камер "
-            "по всему миру. Карта покрытия выросла на 200% за квартал. "
-            "Контракты с Mapillary и Niantic."
-        ),
-        "what_does": (
-            "Водители с дэш-камерами собирают данные дорожной карты в реальном времени. "
-            "За каждый километр получают токены HONEY. Данные продаются компаниям."
-        ),
-        "link": "https://hivemapper.com",
-    },
-    {
-        "name": "Babylon (BABY)",
-        "niche": "Bitcoin DeFi",
-        "why_hyping": (
-            "Bitcoin staking для безопасности PoS-сетей — $5B+ BTC застейкано. "
-            "Партнёрства с 50+ L2/L1 проектами. Самый масштабный Bitcoin DeFi-протокол."
-        ),
-        "what_does": (
-            "Позволяет владельцам BTC стейкать свои биткоины для обеспечения "
-            "безопасности Proof-of-Stake сетей, не покидая Bitcoin L1. "
-            "Создаёт экономику безопасности поверх Bitcoin."
-        ),
-        "link": "https://babylonlabs.io",
-    },
-    {
-        "name": "Midas (MIDAS)",
-        "niche": "RWA",
-        "why_hyping": (
-            "Токенизированные гособлигации США с доходностью 5%+ on-chain. "
-            "TVL вырос с $10M до $200M+ за 2 месяца. Институциональные "
-            "инвесторы массово заходят через Midas."
-        ),
-        "what_does": (
-            "Платформа RWA, которая токенизирует казначейские облигации США "
-            "и другие традиционные финансовые активы, предоставляя "
-            "доступ к стабильному доходу через DeFi."
-        ),
-        "link": "https://midas.app",
-    },
-    {
-        "name": "Mode Network (MODE)",
-        "niche": "L2/L3",
-        "why_hyping": (
-            "L2 на OP Stack с репутационной системой и ретро-дропами. "
-            "TVL вырос на 350% за месяц. Активная экосистема DeFi-протоколов "
-            "и уникальная модель совместного финансирования sequencer fees."
-        ),
-        "what_does": (
-            "Optimistic Rollup L2 с системой Onchain Boost — часть комиссий от sequencer "
-            "распределяется между протоколами, которые привлекают пользователей."
-        ),
-        "link": "https://mode.network",
-    },
-    {
-        "name": "Aethir (ATH)",
-        "niche": "DePIN",
-        "why_hyping": (
-            "Децентрализованные GPU-облака для AI и cloud gaming — 90K+ нод. "
-            "Партнёрство с Qualcomm и PixelBirds. Выручка $30M+ за квартал, "
-            "один из немногих DePIN с реальным revenue."
-        ),
-        "what_does": (
-            "Enterprise-grade DePIN для распределённых GPU-вычислений. "
-            "Предоставляет децентрализованную инфраструктуру для AI-инференса, "
-            "облачного гейминга и рендеринга."
-        ),
-        "link": "https://www.aethir.com",
-    },
-    {
-        "name": "Molecule (MOLEC)",
-        "niche": "DeSci",
-        "why_hyping": (
-            "БиоDAO платформа — децентрализованное финансирование научных "
-            "исследований через IP-NFT. $20M+ привлечено для исследований "
-            "онкологии и долголетия. Narrative DeSci активно растёт."
-        ),
-        "what_does": (
-            "Создаёт биоDAO для финансирования научных исследований. "
-            "Интеллектуальная собственность токенизируется как IP-NFT, "
-            "позволяя сообществам совместно владеть результатами исследований."
-        ),
-        "link": "https://molecule.to",
-    },
+FALLBACK_CRYPTO: list[dict] = []  # Kept for compat; use FALLBACK_CRYPTO_POOLS instead
+
+FALLBACK_CRYPTO_POOLS: list[list[dict]] = [
+    # ── Pool 1: AI + DePIN + Bitcoin DeFi ──
+    [
+        {
+            "name": "Spectral (SPEC)",
+            "niche": "AI",
+            "why_hyping": (
+                "On-chain AI-агенты из промптов — синтаксис для смарт-контрактов. "
+                "TVL вырос на 400% за 30 дней. Активно интегрируется в DeFi."
+            ),
+            "what_does": (
+                "Токенизация и синтез AI-агентов, которые автономно торгуют, "
+                "анализируют рынки и управляют DeFi-позициями."
+            ),
+            "link": "https://spectral.finance",
+        },
+        {
+            "name": "Virtuals Protocol (VIRTUAL)",
+            "niche": "AI",
+            "why_hyping": (
+                "AI-агенты с токенизацией на Base — самый хайповый narrative 2025. "
+                "Капитализация с $50M до $2B+ за 3 месяца. AIXBT — вирусный инфлюенсер."
+            ),
+            "what_does": (
+                "Создание, токенизация и монетизация AI-агентов. Каждый агент — "
+                "автономная сущность с токеном, взаимодействующая в соцсетях и DeFi."
+            ),
+            "link": "https://virtuals.io",
+        },
+        {
+            "name": "Hivemapper (HONEY)",
+            "niche": "DePIN",
+            "why_hyping": (
+                "150K+ дэш-камер по всему миру. Покрытие выросло на 200% за квартал. "
+                "Контракты с Mapillary и Niantic."
+            ),
+            "what_does": (
+                "Водители с дэш-камерами собирают карту в реальном времени. "
+                "Токены HONEY за каждый километр. Данные продаются компаниям."
+            ),
+            "link": "https://hivemapper.com",
+        },
+        {
+            "name": "Babylon (BABY)",
+            "niche": "Bitcoin DeFi",
+            "why_hyping": (
+                "Bitcoin staking для безопасности PoS-сетей — $5B+ BTC застейкано. "
+                "Партнёрства с 50+ L2/L1 проектами."
+            ),
+            "what_does": (
+                "Владельцы BTC стейкают биткоины для обеспечения безопасности "
+                "PoS-сетей, не покидая Bitcoin L1."
+            ),
+            "link": "https://babylonlabs.io",
+        },
+        {
+            "name": "Midas (MIDAS)",
+            "niche": "RWA",
+            "why_hyping": (
+                "Токенизированные гособлигации США с 5%+ on-chain. "
+                "TVL: $10M → $200M+ за 2 месяца."
+            ),
+            "what_does": (
+                "RWA-платформа токенизирует казначейские облигации США "
+                "и другие активы для DeFi-доступа к стабильному доходу."
+            ),
+            "link": "https://midas.app",
+        },
+        {
+            "name": "Mode Network (MODE)",
+            "niche": "L2/L3",
+            "why_hyping": (
+                "L2 на OP Stack с ретро-дропами. TVL +350% за месяц. "
+                "Onchain Boost — часть комиссий sequencer идёт протоколам."
+            ),
+            "what_does": (
+                "Optimistic Rollup L2 с уникальной моделью: комиссии от sequencer "
+                "распределяются между протоколами, привлекающими пользователей."
+            ),
+            "link": "https://mode.network",
+        },
+        {
+            "name": "Aethir (ATH)",
+            "niche": "DePIN",
+            "why_hyping": (
+                "90K+ GPU-нод для AI и cloud gaming. Партнёрство с Qualcomm. "
+                "Выручка $30M+ за квартал — один из немногих DePIN с реальным revenue."
+            ),
+            "what_does": (
+                "Enterprise-grade DePIN для распределённых GPU-вычислений: "
+                "AI-инференс, облачный гейминг, рендеринг."
+            ),
+            "link": "https://www.aethir.com",
+        },
+        {
+            "name": "Molecule (MOLEC)",
+            "niche": "DeSci",
+            "why_hyping": (
+                "БиоDAO — децентрализованное финансирование науки через IP-NFT. "
+                "$20M+ для исследований онкологии и долголетия."
+            ),
+            "what_does": (
+                "Создаёт биоDAO для исследований. IP-NFT позволяет сообществам "
+                "совместно владеть результатами научных исследований."
+            ),
+            "link": "https://molecule.to",
+        },
+    ],
+    # ── Pool 2: RWA + DeSci + new L2/L3 ──
+    [
+        {
+            "name": "OpenEden (TBILL)",
+            "niche": "RWA",
+            "why_hyping": (
+                "Токенизированные T-Bills с реальным доходом 5%+ APY. "
+                "TVL вырос с $5M до $500M+. Аудит Big Four."
+            ),
+            "what_does": (
+                "Институциональная RWA-платформа для токенизации казначейских "
+                "векселей США на Ethereum и Mantle."
+            ),
+            "link": "https://www.openeden.com",
+        },
+        {
+            "name": "Centrifuge (CFG)",
+            "niche": "RWA",
+            "why_hyping": (
+                "Крупнейшая DeFi-платформа для реальных активов — $200M+ TVL. "
+                "Токенизирует кредиты, недвижимость и инвойсы."
+            ),
+            "what_does": (
+                "Liquidity pool для RWA: реальные активы (кредиты, недвижимость) "
+                "становятся collateral в DeFi-протоколах."
+            ),
+            "link": "https://centrifuge.io",
+        },
+        {
+            "name": "Blast (BLAST)",
+            "niche": "L2/L3",
+            "why_hyping": (
+                "L2 с native yield на ETH и USDB. $2B+ TVL на аирдроп. "
+                "Parrots — самый популярный DApp в экосистеме."
+            ),
+            "what_does": (
+                "Optimistic Rollup на Ethereum с автоматическим yield для ETH и "
+                "стейблкоинов. Аэрдроп $BLAST — один из крупнейших в 2024."
+            ),
+            "link": "https://blast.io",
+        },
+        {
+            "name": "BounceBit (BB)",
+            "niche": "Bitcoin DeFi",
+            "why_hyping": (
+                "Bitcoin restaking на BRC-20 — уникальный bridge между BTC DeFi "
+                "и EVM-экосистемой. TVL $500M+."
+            ),
+            "what_does": (
+                "Позволяет стейкать BTC для заработка yield через DeFi-протоколы "
+                "на EVM-совместимых сетях."
+            ),
+            "link": "https://bouncebit.io",
+        },
+        {
+            "name": "Degen Chain",
+            "niche": "L2/L3",
+            "why_hyping": (
+                "L3 на Arbitrum Orbit для degen-трейдинга. Degen token — "
+                "главный token of Base ecosystem. Переносит memecoin trading on-chain."
+            ),
+            "what_does": (
+                "Супер-быстрая L3 для memecoin-трейдинга с минимальными комиссиями. "
+                "Социальный протокол с tip-культурой."
+            ),
+            "link": "https://degen.mirror.xyz",
+        },
+        {
+            "name": "VitaDAO (VITA)",
+            "niche": "DeSci",
+            "why_hyping": (
+                "Крупнейший биоDAO с $5M+ на исследования долголетия. "
+                "Финансирует Stanford, Oxford. Токен вырос на 300%."
+            ),
+            "what_does": (
+                "Децентрализованная DAO для финансирования долголетия. "
+                "IP-NFT для интеллектуальной собственности в биотехе."
+            ),
+            "link": "https://vita.mirror.xyz",
+        },
+        {
+            "name": "Wayfinder (FIND)",
+            "niche": "AI",
+            "why_hyping": (
+                "AI-навигатор Web3 — автономные агенты, которые находят лучший "
+                "путь для DeFi-операций. Рост пользовательской базы 500% за месяц."
+            ),
+            "what_does": (
+                "AI-протокол, который создаёт автономных агентов-помощников для "
+                "Web3: навигация по DeFi, yield-оптимизация, cross-chain мосты."
+            ),
+            "link": "https://wayfinder.ai",
+        },
+        {
+            "name": "Natix Network (NATIX)",
+            "niche": "DePIN",
+            "why_hyping": (
+                "Камеры смартфонов как датчики для физического мира. 100K+ "
+                "участников. Контракты с городскими муниципалитетами."
+            ),
+            "what_does": (
+                "DePIN-сеть, где смартфоны с камерами собирают данные о трафике, "
+                "парковке, пешеходах. Токен NATIX за данные."
+            ),
+            "link": "https://www.natix.network",
+        },
+    ],
+    # ── Pool 3: GameFi + SocialFi + Modular ──
+    [
+        {
+            "name": "Illuvium (ILV)",
+            "niche": "GameFi",
+            "why_hyping": (
+                "AAA-качество auto-battler RPG на Immutable X. "
+                "$100M+ привлечено. Полная игра (не просто P2E) — "
+                "первый реальный GameFi с графикой уровня AAA."
+            ),
+            "what_does": (
+                "Blockchain RPG с auto-battler механикой и collectible NFT-персонажами. "
+                "Полная игровая экономика с land, crafting, PVP."
+            ),
+            "link": "https://illuvium.io",
+        },
+        {
+            "name": "Pixels (PIXEL)",
+            "niche": "GameFi",
+            "why_hyping": (
+                "Farm-sim на Ronin Network — 1M+ DAU. Стал одним из самых "
+                "играемых Web3-игр. Монетизация через премиум-предметы."
+            ),
+            "what_does": (
+                "Блокчейн-игра в стиле Stardew Valley: farming, crafting, "
+                "социальные механики. Встроенная NFT-экономика."
+            ),
+            "link": "https://pixels.xyz",
+        },
+        {
+            "name": "Friend.tech 2.0 (FRIEND)",
+            "niche": "SocialFi",
+            "why_hyping": (
+                "Возрождение на Base — токенизированные соцсети. "
+                "Новый сезон с улучшенной экономикой. Перенос на Base привлек 500K+ юзеров."
+            ),
+            "what_does": (
+                "Децентрализованная соцсеть: profile-bound токены для создателей. "
+                "Чаты, tipping, exclusive content — всё on-chain."
+            ),
+            "link": "https://www.friend.tech",
+        },
+        {
+            "name": "Story Protocol (IP)",
+            "niche": "Modular",
+            "why_hyping": (
+                "IP-инфраструктура для AI — токенизация лицензий на контент. "
+                "$134M funding. Решает проблему прав для AI-контента."
+            ),
+            "what_does": (
+                "Блокчейн для управления интеллектуальной собственностью. "
+                "AI-модели могут лицензировать контент через смарт-контракты."
+            ),
+            "link": "https://www.storyprotocol.xyz",
+        },
+        {
+            "name": "EigenLayer (EIGEN)",
+            "niche": "Modular",
+            "why_hyping": (
+                "Restaking-протокол на Ethereum — $15B+ TVL. "
+                "Позволяет переиспользовать ETH для безопасности множества сетей."
+            ),
+            "what_does": (
+                "Restaking на Ethereum: стейкеры могут переиспользовать "
+                "свой ETH для обеспечения новых AVS (Active Validation Services)."
+            ),
+            "link": "https://www.eigenlayer.xyz",
+        },
+        {
+            "name": "Sona (SONA)",
+            "niche": "AI",
+            "why_hyping": (
+                "AI-протокол для генерации музыки. Партнёрство с Universal Music. "
+                "Trending narrative: AI + Music. Токен вырос 500% на аирдроп."
+            ),
+            "what_does": (
+                "Децентрализованная платформа для AI-генерации и лицензирования "
+                "музыки. Решает проблемы copyright в AI-music."
+            ),
+            "link": "https://sona.xyz",
+        },
+        {
+            "name": "Grass (GRASS)",
+            "niche": "DePIN",
+            "why_hyping": (
+                "Браузерное DePIN — продаёт bandwidth данных для AI training. "
+                "2M+ пользователей. Токен на Bybit и Binance."
+            ),
+            "what_does": (
+                "Расширение браузера, которое собирает bandwidth для AI-компаний. "
+                "Пользователи получают GRASS за расшаренный интернет."
+            ),
+            "link": "https://app.getgrass.io",
+        },
+        {
+            "name": "OriginTrail (TRAC)",
+            "niche": "RWA",
+            "why_hyping": (
+                "Supply chain DePIN — трекинг товаров через V6 protocol. "
+                "Граф знаний для supply chain. Используют Samsung и Л'Ореаль."
+            ),
+            "what_does": (
+                "Децентрализованный граф знаний для supply chain: "
+                "происхождение товаров, сертификаты, compliance — всё on-chain."
+            ),
+            "link": "https://origintrail.io",
+        },
+    ],
 ]
 
-FALLBACK_COMPANIES: list[dict] = [
-    {
-        "name": "Helsing",
-        "description": (
-            "European AI defense startup building sovereign AI for NATO "
-            "allies with 500M+ EUR raised. Europe's answer to Palantir."
-        ),
-        "link": "https://helsing.ai",
-        "sector": "AI / Defense",
-    },
-    {
-        "name": "Klarna",
-        "description": (
-            "Swedish BNPL giant pivoting to AI shopping assistant, profitable "
-            "since 2023, $46B valuation. AI that does what a personal shopper "
-            "team used to."
-        ),
-        "link": "https://www.klarna.com",
-        "sector": "Fintech",
-    },
-    {
-        "name": "Revolut",
-        "description": (
-            "UK neobank with 45M+ users expanding into crypto, trading, "
-            "travel money. Started as a travel card, became a financial "
-            "super-app."
-        ),
-        "link": "https://www.revolut.com",
-        "sector": "Fintech",
-    },
-    {
-        "name": "DeepL",
-        "description": (
-            "Cologne AI translation startup surpassing Google Translate "
-            "quality, $2B valuation. Enterprise clients abandon every "
-            "other tool."
-        ),
-        "link": "https://www.deepl.com",
-        "sector": "AI / Language",
-    },
-    {
-        "name": "Northvolt",
-        "description": (
-            "Swedish battery maker building Europe's first EV gigafactory "
-            "with $10B+ invested. Europe's bet to end Asian battery dependency."
-        ),
-        "link": "https://northvolt.com",
-        "sector": "Green Tech / EV",
-    },
-    {
-        "name": "Bolt",
-        "description": (
-            "Estonian mobility super-app — ride-hailing, scooters, food "
-            "delivery. Profitable and expanding to Africa. Beat Uber by "
-            "being faster and cheaper."
-        ),
-        "link": "https://bolt.eu",
-        "sector": "Mobility",
-    },
-    {
-        "name": "Einride",
-        "description": (
-            "Swedish autonomous electric truck startup doing commercial "
-            "autonomous freight across Europe. Futuristic pod-trucks — "
-            "already happening."
-        ),
-        "link": "https://www.einride.com",
-        "sector": "Logistics / EV",
-    },
-    {
-        "name": "Picnic",
-        "description": (
-            "Dutch online supermarket with AI-powered route planning and "
-            "micro-fulfillment centers. Delivering groceries at cut-rate "
-            "prices via ML optimization."
-        ),
-        "link": "https://www.picnic.app",
-        "sector": "Foodtech / Logistics",
-    },
+FALLBACK_COMPANIES: list[dict] = []  # Kept for compat; use FALLBACK_COMPANIES_POOLS instead
+
+FALLBACK_COMPANIES_POOLS: list[list[dict]] = [
+    # ── Pool 1: European AI & Defense ──
+    [
+        {
+            "name": "Helsing",
+            "description": (
+                "European AI defense startup — sovereign AI для НАТО. "
+                "$500M+ привлечено. European answer to Palantir. "
+                "Контракты с министерствами обороны Германии, Франции, Испании."
+            ),
+            "link": "https://helsing.ai",
+            "sector": "AI / Defense",
+        },
+        {
+            "name": "Mistral AI",
+            "description": (
+                "Французский AI-лаб — $600M+ раунд, конкурирует с OpenAI. "
+                "Модели Mistral Large и Codestral. Самый быстрорастущий "
+                "European AI-стартап. Open-source + enterprise."
+            ),
+            "link": "https://mistral.ai",
+            "sector": "AI / LLM",
+        },
+        {
+            "name": "Synthesia",
+            "description": (
+                "UK AI video generation — $90M funding, enterprise focus. "
+                "Генерация профессиональных видео из текста за минуты. "
+                "2,000+ enterprise клиентов, replacing traditional video production."
+            ),
+            "link": "https://www.synthesia.io",
+            "sector": "AI / Video",
+        },
+        {
+            "name": "DeepL",
+            "description": (
+                "Cologne AI-перевод, превосходящий Google Translate. "
+                "$2B valuation. Enterprise-клиенты массово переходят "
+                "с Google/DeepL. Pro-версия для команд."
+            ),
+            "link": "https://www.deepl.com",
+            "sector": "AI / Language",
+        },
+        {
+            "name": "Hugging Face",
+            "description": (
+                "French AI — GitHub для ML-моделей. $4.5B valuation. "
+                "Главная платформа open-source AI. "
+                "100B+ downloads моделей, every AI dev uses it."
+            ),
+            "link": "https://huggingface.co",
+            "sector": "AI / Platform",
+        },
+        {
+            "name": "Owkin",
+            "description": (
+                "French AI-биотех — $300M+ funding. AI для "
+                "открытия лекарств и диагностики. Партнёрства с Pfizer и Sanofi."
+            ),
+            "link": "https://www.owkin.com",
+            "sector": "Biotech / AI",
+        },
+        {
+            "name": "Alan",
+            "description": (
+                "French healthtech insurtech — preventative healthcare. "
+                "$600M+ valuation, 800K+ members. AI-ассистент для "
+                "пользователей и автоматизированные выплаты."
+            ),
+            "link": "https://www.alan.com",
+            "sector": "Healthtech / Insurtech",
+        },
+        {
+            "name": "Meilisearch",
+            "description": (
+                "French open-source search engine — Rust-based, instant results. "
+                "Альтернатива Algolia/Elasticsearch. Growing 200% YoY. "
+                "80K+ GitHub stars, $25M+ funding."
+            ),
+            "link": "https://www.meilisearch.com",
+            "sector": "DevTools / Search",
+        },
+    ],
+    # ── Pool 2: Global hot startups ──
+    [
+        {
+            "name": "Groq",
+            "description": (
+                "AI chip startup — ultra-fast LPU inference. "
+                "В 10x быстрее GPU для LLM. $600M+ funding. "
+                "Open-source model hosting. Конкурирует с NVIDIA."
+            ),
+            "link": "https://groq.com",
+            "sector": "AI Chips / Infrastructure",
+        },
+        {
+            "name": "ElevenLabs",
+            "description": (
+                "Polish AI voice cloning — $80M+ funding. Самый реалистичный "
+                "AI-voice на рынке. dubbing для контента, audiobooks, gaming. "
+                "1M+ users."
+            ),
+            "link": "https://elevenlabs.io",
+            "sector": "AI / Audio",
+        },
+        {
+            "name": "Figure AI",
+            "description": (
+                "US humanoid robotics — $675M+ funding. Роботы-гуманоиды "
+                "для складов и мануфактуры. Partner with BMW and OpenAI. "
+                "First commercial deployment in 2025."
+            ),
+            "link": "https://www.figure.ai",
+            "sector": "Robotics / AI",
+        },
+        {
+            "name": "Runway",
+            "description": (
+                "US AI video generation — Gen-3 Alpha модель. "
+                "$240M+ funding, $4B valuation. Hollywood studios "
+                "используют для VFX и storyboarding."
+            ),
+            "link": "https://runwayml.com",
+            "sector": "AI / Creative",
+        },
+        {
+            "name": "Anduril",
+            "description": (
+                "US defense tech — $2.4B+ funding. AI-powered autonomous "
+                "defense systems, drone swarms, surveillance towers. "
+                "Replacing legacy defense contractors."
+            ),
+            "link": "https://www.anduril.com",
+            "sector": "Defense / AI",
+        },
+        {
+            "name": "Harvey AI",
+            "description": (
+                "US legal AI — $80M+ funding. AI-ассистент для юристов. "
+                "Клиенты: Allen & Overy, PwC, O'Melveny. Automates contract review."
+            ),
+            "link": "https://www.harvey.ai",
+            "sector": "Legal Tech / AI",
+        },
+        {
+            "name": "Glean",
+            "description": (
+                "US enterprise AI search — $200M+ funding. "
+                "Поиск по всем рабочим инструментам (Slack, Drive, Confluence). "
+                "AI-ответы на основе внутренних данных компании."
+            ),
+            "link": "https://www.glean.com",
+            "sector": "Enterprise / AI",
+        },
+        {
+            "name": "Hebbia",
+            "description": (
+                "US AI for analysts — $130M+ funding. Matrix AI для "
+                "анализа 1000-page документов. Используют хедж-фонды "
+                "и инвестиционные банки."
+            ),
+            "link": "https://www.hebbia.ai",
+            "sector": "AI / Finance",
+        },
+    ],
+    # ── Pool 3: Climate, logistics & emerging tech ──
+    [
+        {
+            "name": "Northvolt",
+            "description": (
+                "Swedish battery maker — $10B+ invested. Первая европейская "
+                "EV gigafactory. Ставка Европы на независимость "
+                "от азиатских батарей. Контракт с BMW и VW."
+            ),
+            "link": "https://northvolt.com",
+            "sector": "Green Tech / EV",
+        },
+        {
+            "name": "Einride",
+            "description": (
+                "Swedish autonomous electric trucks — коммерческие "
+                "автономные грузоперевозки по Европе. Pod-trucks будущего "
+                "уже работают. $500M+ funding."
+            ),
+            "link": "https://www.einride.com",
+            "sector": "Logistics / EV",
+        },
+        {
+            "name": "Klarna",
+            "description": (
+                "Swedish BNPL → AI shopping assistant. Прибыльный с 2023, "
+                "$46B valuation. AI replaced 700 customer service agents. "
+                "Переход от BNPL к AI-powered commerce platform."
+            ),
+            "link": "https://www.klarna.com",
+            "sector": "Fintech / AI",
+        },
+        {
+            "name": "Lightmatter",
+            "description": (
+                "US photonic AI chips — использует свет для вычислений. "
+                "В 100x эффективнее GPU для AI inference. $800M+ funding. "
+                "Следующий этап chip-индустрии."
+            ),
+            "link": "https://lightmatter.com",
+            "sector": "Photonics / AI Chips",
+        },
+        {
+            "name": "Cognition (Devin)",
+            "description": (
+                "US autonomous AI software engineer — Devin. "
+                "AI, который самостоятельно пишет, тестирует и деплоит код. "
+                "$175M+ funding. Самый обсуждаемый AI-product 2025."
+            ),
+            "link": "https://cognition.ai",
+            "sector": "AI / Developer Tools",
+        },
+        {
+            "name": "Poolside AI",
+            "description": (
+                "French AI coding assistant — $126M seed round (largest ever). "
+                "Конкурент GitHub Copilot с focus на enterprise. "
+                "Founded by ex-Meta AI lead."
+            ),
+            "link": "https://poolside.ai",
+            "sector": "AI / Developer Tools",
+        },
+        {
+            "name": "Bolt",
+            "description": (
+                "Estonian mobility super-app — ride-hailing, scooters, food. "
+                "Прибыльный и расширяется в Африку. $2B+ valuation. "
+                "Побеждает Uber ценой и скоростью."
+            ),
+            "link": "https://bolt.eu",
+            "sector": "Mobility / Super-app",
+        },
+        {
+            "name": "Celonis",
+            "description": (
+                "German process mining — AI для оптимизации бизнес-процессов. "
+                "$4B+ valuation. Клиенты: Siemens, Roche, Vodafone. "
+                "Выявляет неэффективности в компаниях через data analysis."
+            ),
+            "link": "https://www.celonis.com",
+            "sector": "Enterprise AI / Process Mining",
+        },
+    ],
 ]
 
 # Fallback analysis data (used when AI completely fails)
@@ -2872,7 +3464,7 @@ async def cmd_start(message: Message) -> None:
     """Handle the /start command — send greeting with menu."""
     try:
         await message.answer(
-            "👋 *EU Trend Analytics v14.0*\n\n"
+            "👋 *EU Trend Analytics v15.0*\n\n"
             "🤖 AI-анализ трендов в реальном времени\n"
             "🔥 Каждому тренду — улучшенный оффер с:\n"
             "  📦 Готовым сайтом (ZIP архив)\n"
@@ -2929,19 +3521,33 @@ async def handle_category_message(message: Message) -> None:
     try:
         await message.answer(CATEGORY_SEARCH_MESSAGES[matched_category])
 
-        # ─── CRYPTO: use dedicated deep niche search ───
-        if matched_category == "crypto":
-            items = await search_crypto_deep()
-        else:
-            # ─── STORES / COMPANIES: use AI search ───
-            items = await ask_ai_list(CATEGORY_PROMPTS[matched_category])
-            if not items:
-                logger.warning(f"[{matched_category}] AI returned empty, using fallback")
-                items = CATEGORY_FALLBACKS[matched_category]
+        # ─── Route to dedicated deep search per category ───
+        search_fns = {
+            "crypto": search_crypto_deep,
+            "stores": search_stores_deep,
+            "companies": search_companies_deep,
+        }
+        search_fn = search_fns.get(matched_category)
 
+        items = []
+        if search_fn:
+            try:
+                items = await asyncio.wait_for(search_fn(), timeout=40)
+            except asyncio.TimeoutError:
+                logger.warning(f"[{matched_category}] Search timed out (40s), using fallback")
+            except Exception as e:
+                logger.warning(f"[{matched_category}] Search error: {e}")
+
+        # ─── Fallback: rotated pools ───
         if not items:
-            logger.warning(f"[{matched_category}] No results at all, using fallback")
-            items = CATEGORY_FALLBACKS[matched_category]
+            fallback_pools = {
+                "crypto": FALLBACK_CRYPTO_POOLS,
+                "stores": FALLBACK_STORES_POOLS,
+                "companies": FALLBACK_COMPANIES_POOLS,
+            }
+            pools = fallback_pools.get(matched_category, [])
+            items = random.choice(pools) if pools else []
+            logger.info(f"[{matched_category}] Using fallback ({len(items)} items)")
 
         await send_items_batch(message, items, matched_category, CATEGORY_TITLES[matched_category])
         return True
@@ -2949,15 +3555,20 @@ async def handle_category_message(message: Message) -> None:
         logger.error(f"[handle_category] {e}", exc_info=True)
         _last_errors.append(f"category-{matched_category}: {e}")
         try:
-            # Try to send fallback even on error
-            fallback_items = CATEGORY_FALLBACKS.get(matched_category, [])
+            fallback_pools = {
+                "crypto": FALLBACK_CRYPTO_POOLS,
+                "stores": FALLBACK_STORES_POOLS,
+                "companies": FALLBACK_COMPANIES_POOLS,
+            }
+            pools = fallback_pools.get(matched_category, [])
+            fallback_items = random.choice(pools) if pools else []
             if fallback_items:
                 await send_items_batch(message, fallback_items, matched_category, CATEGORY_TITLES[matched_category])
             else:
                 await message.answer("❌ Ошибка при поиске трендов. Попробуй позже.")
         except Exception:
             pass
-        return True  # was handled, just with an error
+        return True
 
 
 @dp.message(F.text)
@@ -2990,9 +3601,9 @@ CATEGORY_PROMPTS: dict[str, str] = {
 }
 
 CATEGORY_FALLBACKS: dict[str, list] = {
-    "stores": FALLBACK_STORES,
-    "crypto": FALLBACK_CRYPTO,
-    "companies": FALLBACK_COMPANIES,
+    "stores": FALLBACK_STORES_POOLS[0] if FALLBACK_STORES_POOLS else [],
+    "crypto": FALLBACK_CRYPTO_POOLS[0] if FALLBACK_CRYPTO_POOLS else [],
+    "companies": FALLBACK_COMPANIES_POOLS[0] if FALLBACK_COMPANIES_POOLS else [],
 }
 
 CATEGORY_TITLES: dict[str, str] = {
