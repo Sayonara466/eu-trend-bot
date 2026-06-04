@@ -52,3 +52,13 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Download / temp output files
+/download/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Backup files with credentials
+trend-finder-bot/__pycache__/

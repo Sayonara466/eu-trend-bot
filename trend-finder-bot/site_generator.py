@@ -1,35 +1,51 @@
 """
-Premium dark-themed multi-section website generator for Trend Finder Bot.
-Generates complete (html, css, js) strings for stores/crypto/companies sites
-with glassmorphism, 3D effects, and Font Awesome icons.
+Category-aware multi-section website generator for Trend Finder Bot.
+Generates a single self-contained index.html (CSS+JS inlined) with
+THREE completely different design systems based on category:
+  - stores:    Light boutique theme (Playfair Display + Inter, pastels, soft shadows)
+  - crypto:    Dark Web3 theme (Space Grotesk + Inter, neon gradients, glassmorphism)
+  - companies: Light corporate theme (Inter only, flat blue, structured cards)
 """
 
 from __future__ import annotations
 
 # ──────────────────────── Theme Configs ────────────────────────
-# ALL categories use the same dark base. Only accent colours differ.
+# Each category gets its own complete visual identity.
 
 THEMES = {
+    # ═══ STORES: Light boutique / luxury ═══
     "stores": {
-        "bg": "#0B0B0E",
-        "card": "#16161A",
-        "card_glass": "rgba(22,22,26,0.7)",
-        "text_primary": "#EAEAEA",
-        "text_secondary": "#9CA3AF",
-        "accent_start": "#E8D5B7",
+        "bg": "#FFFBF5",
+        "bg_alt": "#F5F0EB",
+        "card": "#FFFFFF",
+        "text_primary": "#1A1A1A",
+        "text_secondary": "#6B7280",
+        "accent_start": "#C4A882",
         "accent_end": "#D4A574",
-        "gradient": "linear-gradient(135deg, #E8D5B7 0%, #D4A574 100%)",
-        "accent": "#D4A574",
-        "accent_hover": "#C49464",
-        "border": "rgba(255,255,255,0.08)",
-        "footer_bg": "#07070A",
-        "nav_bg": "rgba(11,11,14,0.92)",
+        "gradient": "linear-gradient(135deg, #C4A882 0%, #D4A574 100%)",
+        "accent": "#C4A882",
+        "accent_hover": "#B8976E",
+        "border": "#E8E0D8",
+        "border_light": "#F0EBE5",
+        "footer_bg": "#1A1A1A",
+        "footer_text": "#D1C7BA",
+        "nav_bg": "rgba(255,251,245,0.95)",
+        "nav_shadow": "rgba(0,0,0,0.05)",
         "icon": "fa-solid fa-store",
+        "heading_font": "'Playfair Display', serif",
+        "body_font": "'Inter', sans-serif",
+        "card_shadow": "0 4px 24px rgba(0,0,0,0.06)",
+        "card_shadow_hover": "0 12px 40px rgba(0,0,0,0.1)",
+        "placehold_bg": "F5F0EB",
+        "placehold_fg": "1A1A1A",
+        "modal_bg": "rgba(255,255,255,0.95)",
+        "modal_shadow": "0 20px 60px rgba(0,0,0,0.12)",
     },
+    # ═══ CRYPTO: Dark Web3 / tech ═══
     "crypto": {
         "bg": "#0B0B0E",
+        "bg_alt": "#0F0F13",
         "card": "#16161A",
-        "card_glass": "rgba(22,22,26,0.7)",
         "text_primary": "#EAEAEA",
         "text_secondary": "#9CA3AF",
         "accent_start": "#6C5CE7",
@@ -38,25 +54,48 @@ THEMES = {
         "accent": "#6C5CE7",
         "accent_hover": "#5A4BD6",
         "border": "rgba(255,255,255,0.08)",
+        "border_light": "rgba(255,255,255,0.06)",
         "footer_bg": "#07070A",
+        "footer_text": "#9CA3AF",
         "nav_bg": "rgba(11,11,14,0.92)",
+        "nav_shadow": "rgba(0,0,0,0.3)",
         "icon": "fa-solid fa-cube",
+        "heading_font": "'Space Grotesk', sans-serif",
+        "body_font": "'Inter', sans-serif",
+        "card_shadow": "none",
+        "card_shadow_hover": "0 20px 50px rgba(0,0,0,0.4)",
+        "placehold_bg": "16161A",
+        "placehold_fg": "9CA3AF",
+        "modal_bg": "rgba(22,22,26,0.9)",
+        "modal_shadow": "0 20px 60px rgba(0,0,0,0.5)",
     },
+    # ═══ COMPANIES: Light corporate / B2B ═══
     "companies": {
-        "bg": "#0B0B0E",
-        "card": "#16161A",
-        "card_glass": "rgba(22,22,26,0.7)",
-        "text_primary": "#EAEAEA",
-        "text_secondary": "#9CA3AF",
-        "accent_start": "#3B82F6",
-        "accent_end": "#60A5FA",
-        "gradient": "linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)",
-        "accent": "#3B82F6",
-        "accent_hover": "#2563EB",
-        "border": "rgba(255,255,255,0.08)",
-        "footer_bg": "#07070A",
-        "nav_bg": "rgba(11,11,14,0.92)",
+        "bg": "#F8FAFC",
+        "bg_alt": "#EFF3F8",
+        "card": "#FFFFFF",
+        "text_primary": "#0F172A",
+        "text_secondary": "#64748B",
+        "accent_start": "#2563EB",
+        "accent_end": "#2563EB",
+        "gradient": "linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)",
+        "accent": "#2563EB",
+        "accent_hover": "#1D4ED8",
+        "border": "#E2E8F0",
+        "border_light": "#F1F5F9",
+        "footer_bg": "#0F172A",
+        "footer_text": "#94A3B8",
+        "nav_bg": "rgba(248,250,252,0.95)",
+        "nav_shadow": "rgba(0,0,0,0.06)",
         "icon": "fa-solid fa-rocket",
+        "heading_font": "'Inter', sans-serif",
+        "body_font": "'Inter', sans-serif",
+        "card_shadow": "0 1px 3px rgba(0,0,0,0.08)",
+        "card_shadow_hover": "0 8px 30px rgba(0,0,0,0.1)",
+        "placehold_bg": "EFF3F8",
+        "placehold_fg": "64748B",
+        "modal_bg": "rgba(255,255,255,0.97)",
+        "modal_shadow": "0 20px 60px rgba(0,0,0,0.1)",
     },
 }
 
@@ -146,24 +185,34 @@ SEO_KEYWORDS = {
     "companies": "enterprise SaaS, cloud platform, business solution, scalable infrastructure, AI-powered",
 }
 
+# ── Google Fonts URL per category ──
+FONTS_URL = {
+    "stores": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap",
+    "crypto": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap",
+    "companies": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap",
+}
+
 
 # ──────────────────────── Helpers ────────────────────────
 
 def _s(text: str, default: str = "") -> str:
-    """Safe string — returns default if text is None/empty."""
     return (text or "").strip() or default
 
 
 def _first_sentence(text: str) -> str:
-    """Extract the first sentence from text."""
     for sep in (". ", ".", "\n"):
         if sep in text:
-            return text.split(sep)[0].strip() + ("." if sep == ". " or sep == "." else "")
+            return text.split(sep)[0].strip() + ("." if sep in (". ", ".") else "")
     return text.strip()
 
 
+def _hex_to_rgb(hex_color: str) -> str:
+    """Convert '#RRGGBB' to 'r,g,b' string."""
+    h = hex_color.lstrip("#")
+    return ",".join(str(int(h[i:i+2], 16)) for i in (0, 2, 4))
+
+
 def _features(category: str, analysis: dict) -> list:
-    """Build feature list from analysis keywords or use defaults."""
     defaults = list(DEFAULT_FEATURES[category])
     if not analysis:
         return defaults
@@ -177,7 +226,6 @@ def _features(category: str, analysis: dict) -> list:
 
 
 def _faq(category: str, name: str, analysis: dict) -> list:
-    """Build FAQ list with project name interpolated."""
     faqs = DEFAULT_FAQS[category]
     return [(q.format(name=name), a.format(name=name)) for q, a in faqs]
 
@@ -195,39 +243,77 @@ def _nav_items() -> list[tuple[str, str]]:
             ("how-it-works", "How It Works"), ("faq", "FAQ"), ("contact", "Contact")]
 
 
-# ──────────────────────── CSS Generator ────────────────────────
+# ──────────────────────── CSS Generator (per category) ────────────────────────
 
 def _generate_css(t: dict, category: str) -> str:
-    return f"""/* ═══════════ Reset & Base ═══════════ */
-*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    rgb = _hex_to_rgb(t["accent_start"])
+    tp = t["text_primary"]
+    ts = t["text_secondary"]
+    bg = t["bg"]
+    bg_alt = t["bg_alt"]
+    card = t["card"]
+    border = t["border"]
+    accent = t["accent"]
+    hf = t["heading_font"]
+    bf = t["body_font"]
+
+    # ─── Shared base (reset + container) ───
+    base = f"""*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
 html {{ scroll-behavior: smooth; font-size: 16px; }}
 body {{
-  font-family: 'Inter', sans-serif;
-  background: #0B0B0E; color: #EAEAEA;
+  font-family: {bf};
+  background: {bg}; color: {tp};
   line-height: 1.7; overflow-x: hidden; -webkit-font-smoothing: antialiased;
 }}
 a {{ color: inherit; text-decoration: none; }}
 img {{ max-width: 100%; height: auto; display: block; }}
 ul {{ list-style: none; }}
-.container {{ max-width: 1200px; margin: 0 auto; padding: 0 24px; }}
+.container {{ max-width: 1200px; margin: 0 auto; padding: 0 24px; }}"""
 
-/* ═══════════ Typography ═══════════ */
-h1, h2, h3, h4 {{ font-family: 'Inter', sans-serif; line-height: 1.2; font-weight: 700; }}
+    # ─── Typography ───
+    typo = f"""
+h1, h2, h3, h4 {{ font-family: {hf}; line-height: 1.2; font-weight: 700; }}
 .section-title {{
   font-size: clamp(1.8rem, 4vw, 2.8rem);
-  text-align: center; margin-bottom: 16px; color: #EAEAEA;
+  text-align: center; margin-bottom: 16px; color: {tp};
 }}
 .section-subtitle {{
-  text-align: center; color: #9CA3AF;
+  text-align: center; color: {ts};
   max-width: 600px; margin: 0 auto 48px; font-size: 1.05rem;
-}}
+}}"""
 
-/* ═══════════ Buttons ═══════════ */
+    # ─── Buttons ───
+    if category == "stores":
+        btn = f"""
+.btn {{
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 32px; border-radius: 4px;
+  font-weight: 500; font-size: 0.95rem; cursor: pointer;
+  border: none; transition: all 0.3s ease;
+  font-family: {bf}; letter-spacing: 0.5px; text-transform: uppercase;
+}}
+.btn-primary {{
+  background: {tp}; color: #FFFBF5;
+}}
+.btn-primary:hover {{
+  opacity: 0.85; transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+}}
+.btn-outline {{
+  background: transparent; color: {tp};
+  border: 1.5px solid {tp};
+}}
+.btn-outline:hover {{
+  background: {tp}; color: #FFFBF5; transform: translateY(-2px);
+}}"""
+    elif category == "crypto":
+        btn = f"""
 .btn {{
   display: inline-flex; align-items: center; gap: 8px;
   padding: 14px 32px; border-radius: 8px;
   font-weight: 600; font-size: 1rem; cursor: pointer;
-  border: none; transition: all 0.3s ease; font-family: 'Inter', sans-serif;
+  border: none; transition: all 0.3s ease;
+  font-family: {bf};
 }}
 .btn-primary {{
   background: {t["gradient"]}; color: #0B0B0E;
@@ -237,54 +323,62 @@ h1, h2, h3, h4 {{ font-family: 'Inter', sans-serif; line-height: 1.2; font-weigh
   box-shadow: 0 8px 25px rgba(0,0,0,0.3);
 }}
 .btn-outline {{
-  background: transparent; color: {t["accent"]};
-  border: 2px solid {t["accent"]};
+  background: transparent; color: {accent};
+  border: 2px solid {accent};
 }}
 .btn-outline:hover {{
-  background: {t["accent"]}; color: #0B0B0E; transform: translateY(-2px);
+  background: {accent}; color: #0B0B0E; transform: translateY(-2px);
+}}"""
+    else:  # companies
+        btn = f"""
+.btn {{
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 32px; border-radius: 6px;
+  font-weight: 600; font-size: 1rem; cursor: pointer;
+  border: none; transition: all 0.3s ease;
+  font-family: {bf};
 }}
-.btn-white {{
-  background: #EAEAEA; color: #0B0B0E;
+.btn-primary {{
+  background: {accent}; color: #FFFFFF;
 }}
-.btn-white:hover {{
-  transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-  opacity: 0.9;
+.btn-primary:hover {{
+  background: {t["accent_hover"]}; transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(37,99,235,0.25);
 }}
+.btn-outline {{
+  background: transparent; color: {accent};
+  border: 2px solid {accent};
+}}
+.btn-outline:hover {{
+  background: {accent}; color: #FFFFFF; transform: translateY(-2px);
+}}"""
 
-/* ═══════════ Glassmorphism utility ═══════════ */
-.glass {{
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  background: rgba(22,22,26,0.7);
-  border: 1px solid rgba(255,255,255,0.08);
-}}
-
-/* ═══════════ Navigation ═══════════ */
+    # ─── Navigation ───
+    nav = f"""
 .nav {{
   position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
   background: {t["nav_bg"]}; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255,255,255,0.06); transition: all 0.3s ease;
+  border-bottom: 1px solid {border}; transition: all 0.3s ease;
 }}
 .nav-inner {{
   display: flex; align-items: center; justify-content: space-between;
   max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 72px;
 }}
 .nav-logo {{
-  font-family: 'Inter', sans-serif;
-  font-size: 1.3rem; font-weight: 700; color: #EAEAEA;
+  font-family: {hf};
+  font-size: 1.3rem; font-weight: 700; color: {tp};
   display: flex; align-items: center; gap: 8px;
 }}
-.nav-logo i {{
-  color: {t["accent"]}; font-size: 1.1rem;
-}}
+.nav-logo i {{ color: {accent}; font-size: 1.1rem; }}
 .nav-links {{ display: flex; align-items: center; gap: 32px; }}
 .nav-links a {{
-  font-size: 0.9rem; font-weight: 500; color: #9CA3AF;
+  font-size: 0.9rem; font-weight: 500; color: {ts};
   transition: color 0.3s; position: relative;
 }}
-.nav-links a:hover {{ color: #EAEAEA; }}
+.nav-links a:hover {{ color: {tp}; }}
 .nav-links a::after {{
   content: ''; position: absolute; bottom: -4px; left: 0;
-  width: 0; height: 2px; background: {t["accent"]}; transition: width 0.3s;
+  width: 0; height: 2px; background: {accent}; transition: width 0.3s;
 }}
 .nav-links a:hover::after {{ width: 100%; }}
 .burger {{
@@ -292,18 +386,73 @@ h1, h2, h3, h4 {{ font-family: 'Inter', sans-serif; line-height: 1.2; font-weigh
   background: none; border: none; padding: 8px;
 }}
 .burger span {{
-  display: block; width: 24px; height: 2px; background: #EAEAEA;
+  display: block; width: 24px; height: 2px; background: {tp};
   transition: all 0.3s ease; border-radius: 1px;
 }}
 .burger.active span:nth-child(1) {{ transform: rotate(45deg) translate(5px, 5px); }}
 .burger.active span:nth-child(2) {{ opacity: 0; }}
-.burger.active span:nth-child(3) {{ transform: rotate(-45deg) translate(5px, -5px); }}
+.burger.active span:nth-child(3) {{ transform: rotate(-45deg) translate(5px, -5px); }}"""
 
-/* ═══════════ Hero (two-column layout) ═══════════ */
+    # ─── Hero ───
+    if category == "stores":
+        hero = f"""
 .hero {{
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   position: relative; overflow: hidden;
-  background: #0B0B0E;
+  background: {bg};
+}}
+.hero-grid {{
+  display: grid; grid-template-columns: 1fr 1fr; gap: 64px;
+  align-items: center; max-width: 1200px; margin: 0 auto;
+  padding: 0 24px; position: relative; z-index: 2;
+}}
+.hero-left {{ max-width: 560px; }}
+.hero-left h1 {{
+  font-size: clamp(2.2rem, 5.5vw, 3.8rem); margin-bottom: 20px;
+  color: {tp}; font-weight: 600;
+  line-height: 1.1; letter-spacing: -0.02em;
+}}
+.hero-left .hero-desc {{
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  color: {ts}; margin-bottom: 32px; line-height: 1.8; font-weight: 300;
+}}
+.hero-left .hero-cta {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 48px; }}
+.hero-stats {{ display: flex; gap: 40px; flex-wrap: wrap; }}
+.hero-stat {{ text-align: center; }}
+.hero-stat .number {{
+  font-size: clamp(1.4rem, 2.5vw, 2rem); font-weight: 600;
+  font-family: {hf}; color: {tp};
+}}
+.hero-stat .label {{ font-size: 0.8rem; color: {ts}; margin-top: 2px; }}
+.hero-right {{
+  display: flex; justify-content: center; align-items: center;
+  perspective: 1000px;
+}}
+.hero-card-3d {{
+  width: 100%; max-width: 480px; border-radius: 8px; overflow: hidden;
+  transform: perspective(1000px) rotateY(-3deg) rotateX(1deg);
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.6s ease;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.08);
+  border: 1px solid {border};
+  position: relative;
+}}
+.hero-card-3d:hover {{
+  transform: perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(-8px);
+  box-shadow: 0 30px 70px rgba(0,0,0,0.12);
+}}
+.hero-card-3d img {{ width: 100%; height: auto; display: block; background: {bg_alt}; }}
+.hero-card-3d .card-overlay {{
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 24px; background: linear-gradient(to top, rgba(255,251,245,0.95) 0%, transparent 100%);
+}}
+.hero-card-3d .card-overlay h3 {{ font-size: 1.1rem; color: {tp}; margin-bottom: 4px; font-family: {hf}; }}
+.hero-card-3d .card-overlay p {{ font-size: 0.85rem; color: {ts}; font-weight: 300; }}"""
+    elif category == "crypto":
+        hero = f"""
+.hero {{
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+  background: {bg};
 }}
 .hero-grid {{
   display: grid; grid-template-columns: 1fr 1fr; gap: 64px;
@@ -313,7 +462,7 @@ h1, h2, h3, h4 {{ font-family: 'Inter', sans-serif; line-height: 1.2; font-weigh
 .hero-left {{ max-width: 560px; }}
 .hero-left h1 {{
   font-size: clamp(2.2rem, 5.5vw, 3.5rem); margin-bottom: 20px;
-  color: #EAEAEA; font-weight: 800;
+  color: {tp}; font-weight: 800;
   line-height: 1.1;
 }}
 .hero-left h1 .accent-word {{
@@ -322,23 +471,17 @@ h1, h2, h3, h4 {{ font-family: 'Inter', sans-serif; line-height: 1.2; font-weigh
 }}
 .hero-left .hero-desc {{
   font-size: clamp(1rem, 2vw, 1.15rem);
-  color: #9CA3AF; margin-bottom: 32px; line-height: 1.7;
+  color: {ts}; margin-bottom: 32px; line-height: 1.7;
 }}
-.hero-left .hero-cta {{
-  display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 48px;
-}}
-.hero-stats {{
-  display: flex; gap: 40px; flex-wrap: wrap;
-}}
+.hero-left .hero-cta {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 48px; }}
+.hero-stats {{ display: flex; gap: 40px; flex-wrap: wrap; }}
 .hero-stat {{ text-align: center; }}
 .hero-stat .number {{
   font-size: clamp(1.4rem, 2.5vw, 2rem); font-weight: 800;
   background: {t["gradient"]}; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }}
-.hero-stat .label {{ font-size: 0.8rem; color: #9CA3AF; margin-top: 2px; }}
-
-/* ═══════════ Hero 3D Card ═══════════ */
+.hero-stat .label {{ font-size: 0.8rem; color: {ts}; margin-top: 2px; }}
 .hero-right {{
   display: flex; justify-content: center; align-items: center;
   perspective: 1000px;
@@ -347,45 +490,127 @@ h1, h2, h3, h4 {{ font-family: 'Inter', sans-serif; line-height: 1.2; font-weigh
   width: 100%; max-width: 480px; border-radius: 20px; overflow: hidden;
   transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
   transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.6s ease;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 40px rgba({",".join(str(int(t["accent_start"].lstrip("#")[i:i+2], 16)) for i in (0, 2, 4))}, 0.08);
-  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 40px rgba({rgb},0.08);
+  border: 1px solid {border};
   position: relative;
 }}
 .hero-card-3d:hover {{
   transform: perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(-8px);
-  box-shadow: 0 35px 80px rgba(0,0,0,0.6), 0 0 60px rgba({",".join(str(int(t["accent_start"].lstrip("#")[i:i+2], 16)) for i in (0, 2, 4))}, 0.15);
+  box-shadow: 0 35px 80px rgba(0,0,0,0.6), 0 0 60px rgba({rgb},0.15);
 }}
-.hero-card-3d img {{
-  width: 100%; height: auto; display: block;
-  background: #16161A;
-}}
+.hero-card-3d img {{ width: 100%; height: auto; display: block; background: {card}; }}
 .hero-card-3d .card-overlay {{
   position: absolute; bottom: 0; left: 0; right: 0;
   padding: 24px; background: linear-gradient(to top, rgba(11,11,14,0.9) 0%, transparent 100%);
 }}
-.hero-card-3d .card-overlay h3 {{
-  font-size: 1.1rem; color: #EAEAEA; margin-bottom: 4px;
+.hero-card-3d .card-overlay h3 {{ font-size: 1.1rem; color: {tp}; margin-bottom: 4px; }}
+.hero-card-3d .card-overlay p {{ font-size: 0.85rem; color: {ts}; }}"""
+    else:  # companies
+        hero = f"""
+.hero {{
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+  background: {bg};
 }}
-.hero-card-3d .card-overlay p {{
-  font-size: 0.85rem; color: #9CA3AF;
+.hero-grid {{
+  display: grid; grid-template-columns: 1fr 1fr; gap: 64px;
+  align-items: center; max-width: 1200px; margin: 0 auto;
+  padding: 0 24px; position: relative; z-index: 2;
 }}
+.hero-left {{ max-width: 560px; }}
+.hero-left h1 {{
+  font-size: clamp(2.2rem, 5.5vw, 3.2rem); margin-bottom: 20px;
+  color: {tp}; font-weight: 800;
+  line-height: 1.15; letter-spacing: -0.02em;
+}}
+.hero-left .hero-desc {{
+  font-size: clamp(1rem, 2vw, 1.1rem);
+  color: {ts}; margin-bottom: 32px; line-height: 1.7;
+}}
+.hero-left .hero-cta {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 48px; }}
+.hero-stats {{ display: flex; gap: 40px; flex-wrap: wrap; }}
+.hero-stat {{ text-align: center; }}
+.hero-stat .number {{
+  font-size: clamp(1.4rem, 2.5vw, 2rem); font-weight: 800;
+  color: {accent};
+}}
+.hero-stat .label {{ font-size: 0.8rem; color: {ts}; margin-top: 2px; }}
+.hero-right {{
+  display: flex; justify-content: center; align-items: center;
+  perspective: 1000px;
+}}
+.hero-card-3d {{
+  width: 100%; max-width: 480px; border-radius: 12px; overflow: hidden;
+  transform: perspective(1000px) rotateY(-3deg) rotateX(1deg);
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.6s ease;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+  border: 1px solid {border};
+  position: relative;
+}}
+.hero-card-3d:hover {{
+  transform: perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(-8px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+}}
+.hero-card-3d img {{ width: 100%; height: auto; display: block; background: {bg_alt}; }}
+.hero-card-3d .card-overlay {{
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 24px; background: linear-gradient(to top, rgba(248,250,252,0.95) 0%, transparent 100%);
+}}
+.hero-card-3d .card-overlay h3 {{ font-size: 1.1rem; color: {tp}; margin-bottom: 4px; }}
+.hero-card-3d .card-overlay p {{ font-size: 0.85rem; color: {ts}; }}"""
 
-/* ═══════════ Sections ═══════════ */
+    # ─── Sections base ───
+    sections = f"""
 section {{ padding: 100px 0; }}
-.section-dark {{ background: #0B0B0E; }}
-.section-alt {{ background: #0F0F13; }}
+.section-dark {{ background: {bg}; }}
+.section-alt {{ background: {bg_alt}; }}"""
 
-/* ═══════════ About ═══════════ */
+    # ─── About ───
+    about = f"""
 .about-content {{
-  max-width: 800px; margin: 0 auto; padding: 0 24px;
-  text-align: center;
+  max-width: 800px; margin: 0 auto; padding: 0 24px; text-align: center;
 }}
 .about-content p {{
-  font-size: 1.1rem; color: #9CA3AF;
+  font-size: 1.1rem; color: {ts};
   line-height: 1.8; margin-bottom: 20px;
-}}
+}}"""
 
-/* ═══════════ Features (3x2 grid, glassmorphism, tilt hover) ═══════════ */
+    # ─── Feature cards ───
+    if category == "stores":
+        features = f"""
+.features-grid {{
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 32px; max-width: 1200px; margin: 0 auto; padding: 0 24px;
+}}
+.feature-card {{
+  background: {card};
+  border: 1px solid {border};
+  border-radius: 8px; padding: 36px;
+  cursor: pointer;
+  transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 0.4s ease;
+  position: relative; overflow: hidden;
+  box-shadow: {t["card_shadow"]};
+}}
+.feature-card:hover {{
+  transform: translateY(-6px);
+  box-shadow: {t["card_shadow_hover"]};
+}}
+.feature-card .icon-wrap {{
+  width: 48px; height: 48px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: {bg_alt}; color: {accent};
+  font-size: 1.1rem; margin-bottom: 20px;
+}}
+.feature-card h3 {{
+  font-size: 1.1rem; margin-bottom: 10px; font-weight: 600;
+  font-family: {hf}; color: {tp};
+}}
+.feature-card p {{
+  color: {ts}; font-size: 0.95rem; line-height: 1.6; font-weight: 300;
+}}"""
+    elif category == "crypto":
+        features = f"""
 .features-grid {{
   display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 24px; max-width: 1200px; margin: 0 auto; padding: 0 24px;
@@ -393,7 +618,7 @@ section {{ padding: 100px 0; }}
 .feature-card {{
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   background: rgba(22,22,26,0.7);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid {border};
   border-radius: 16px; padding: 32px;
   cursor: pointer;
   transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1),
@@ -413,16 +638,80 @@ section {{ padding: 100px 0; }}
 }}
 .feature-card h3 {{
   font-size: 1.15rem; margin-bottom: 10px; font-weight: 700;
-  font-family: 'Inter', sans-serif;
+  font-family: {hf}; color: {tp};
 }}
 .feature-card p {{
-  color: #9CA3AF; font-size: 0.95rem; line-height: 1.6;
+  color: {ts}; font-size: 0.95rem; line-height: 1.6;
+}}"""
+    else:  # companies
+        features = f"""
+.features-grid {{
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 24px; max-width: 1200px; margin: 0 auto; padding: 0 24px;
 }}
+.feature-card {{
+  background: {card};
+  border: 1px solid {border};
+  border-radius: 10px; padding: 32px;
+  cursor: pointer;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative; overflow: hidden;
+  box-shadow: {t["card_shadow"]};
+}}
+.feature-card:hover {{
+  transform: translateY(-4px);
+  box-shadow: {t["card_shadow_hover"]};
+  border-color: {accent};
+}}
+.feature-card .icon-wrap {{
+  width: 44px; height: 44px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: {accent}; color: #FFFFFF;
+  font-size: 1.1rem; margin-bottom: 18px;
+}}
+.feature-card h3 {{
+  font-size: 1.05rem; margin-bottom: 8px; font-weight: 700;
+  font-family: {hf}; color: {tp};
+}}
+.feature-card p {{
+  color: {ts}; font-size: 0.9rem; line-height: 1.6;
+}}"""
 
-/* ═══════════ Killer Feature (image left, text right) ═══════════ */
+    # ─── Killer Feature ───
+    if category == "stores":
+        killer = f"""
 .killer {{
   padding: 100px 24px; position: relative; overflow: hidden;
-  background: #0F0F13;
+  background: {bg_alt};
+}}
+.killer-grid {{
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 64px;
+  align-items: center; max-width: 1200px; margin: 0 auto;
+}}
+.killer-image {{
+  position: relative; border-radius: 8px; overflow: hidden;
+  border: 1px solid {border};
+  box-shadow: 0 12px 40px rgba(0,0,0,0.06);
+}}
+.killer-image img {{ width: 100%; height: auto; display: block; background: {bg}; }}
+.killer-image .gradient-overlay {{
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba({rgb},0.15) 0%, transparent 100%);
+  pointer-events: none;
+}}
+.killer-text h2 {{
+  font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+  color: {tp}; margin-bottom: 20px; font-weight: 600;
+}}
+.killer-text p {{
+  font-size: 1.1rem; color: {ts};
+  line-height: 1.8; margin-bottom: 32px; font-weight: 300;
+}}"""
+    elif category == "crypto":
+        killer = f"""
+.killer {{
+  padding: 100px 24px; position: relative; overflow: hidden;
+  background: {bg_alt};
 }}
 .killer-grid {{
   display: grid; grid-template-columns: 1.2fr 1fr; gap: 64px;
@@ -430,26 +719,86 @@ section {{ padding: 100px 0; }}
 }}
 .killer-image {{
   position: relative; border-radius: 20px; overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid {border};
 }}
-.killer-image img {{
-  width: 100%; height: auto; display: block; background: #16161A;
-}}
+.killer-image img {{ width: 100%; height: auto; display: block; background: {card}; }}
 .killer-image .gradient-overlay {{
   position: absolute; inset: 0;
-  background: linear-gradient(135deg, rgba({",".join(str(int(t["accent_start"].lstrip("#")[i:i+2], 16)) for i in (0, 2, 4))}, 0.3) 0%, rgba(11,11,14,0.6) 100%);
+  background: linear-gradient(135deg, rgba({rgb},0.3) 0%, rgba(11,11,14,0.6) 100%);
   pointer-events: none;
 }}
 .killer-text h2 {{
   font-size: clamp(1.6rem, 3.5vw, 2.4rem);
-  color: #EAEAEA; margin-bottom: 20px;
+  color: {tp}; margin-bottom: 20px;
 }}
 .killer-text p {{
-  font-size: 1.1rem; color: #9CA3AF;
+  font-size: 1.1rem; color: {ts};
   line-height: 1.7; margin-bottom: 32px;
+}}"""
+    else:  # companies
+        killer = f"""
+.killer {{
+  padding: 100px 24px; position: relative; overflow: hidden;
+  background: {bg_alt};
 }}
+.killer-grid {{
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 64px;
+  align-items: center; max-width: 1200px; margin: 0 auto;
+}}
+.killer-image {{
+  position: relative; border-radius: 12px; overflow: hidden;
+  border: 1px solid {border};
+  box-shadow: 0 8px 30px rgba(0,0,0,0.06);
+}}
+.killer-image img {{ width: 100%; height: auto; display: block; background: {bg}; }}
+.killer-image .gradient-overlay {{
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba({rgb},0.12) 0%, transparent 100%);
+  pointer-events: none;
+}}
+.killer-text h2 {{
+  font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+  color: {tp}; margin-bottom: 20px; font-weight: 800;
+}}
+.killer-text p {{
+  font-size: 1.1rem; color: {ts};
+  line-height: 1.7; margin-bottom: 32px;
+}}"""
 
-/* ═══════════ How It Works (timeline) ═══════════ */
+    # ─── Steps / How It Works ───
+    if category == "stores":
+        steps_css = f"""
+.steps-container {{
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  max-width: 700px; margin: 0 auto; padding: 0 24px; position: relative;
+}}
+.step {{
+  display: flex; align-items: flex-start; gap: 24px; width: 100%;
+  position: relative; padding-bottom: 48px;
+}}
+.step:last-child {{ padding-bottom: 0; }}
+.step::before {{
+  content: ''; position: absolute; left: 23px; top: 48px;
+  width: 2px; bottom: 0;
+  background: {border};
+}}
+.step:last-child::before {{ display: none; }}
+.step-number {{
+  width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: {bg_alt}; color: {accent};
+  font-weight: 700; font-size: 1.1rem;
+  font-family: {hf};
+  border: 1.5px solid {border};
+}}
+.step-content h3 {{
+  font-family: {hf};
+  font-size: 1.15rem; font-weight: 600; margin-bottom: 6px;
+  color: {tp};
+}}
+.step-content p {{ color: {ts}; font-size: 0.95rem; font-weight: 300; }}"""
+    elif category == "crypto":
+        steps_css = f"""
 .steps-container {{
   display: flex; flex-direction: column; align-items: center; gap: 0;
   max-width: 700px; margin: 0 auto; padding: 0 24px; position: relative;
@@ -470,19 +819,86 @@ section {{ padding: 100px 0; }}
   display: flex; align-items: center; justify-content: center;
   background: {t["gradient"]}; color: #0B0B0E;
   font-weight: 800; font-size: 1.1rem;
-  font-family: 'Inter', sans-serif;
+  font-family: {hf};
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }}
 .step-content h3 {{
-  font-family: 'Inter', sans-serif;
+  font-family: {hf};
   font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;
-  color: #EAEAEA;
+  color: {tp};
 }}
-.step-content p {{
-  color: #9CA3AF; font-size: 0.95rem;
+.step-content p {{ color: {ts}; font-size: 0.95rem; }}"""
+    else:  # companies
+        steps_css = f"""
+.steps-container {{
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  max-width: 700px; margin: 0 auto; padding: 0 24px; position: relative;
 }}
+.step {{
+  display: flex; align-items: flex-start; gap: 24px; width: 100%;
+  position: relative; padding-bottom: 48px;
+}}
+.step:last-child {{ padding-bottom: 0; }}
+.step::before {{
+  content: ''; position: absolute; left: 23px; top: 48px;
+  width: 2px; bottom: 0;
+  background: {border};
+}}
+.step:last-child::before {{ display: none; }}
+.step-number {{
+  width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: {accent}; color: #FFFFFF;
+  font-weight: 700; font-size: 1.1rem;
+  font-family: {hf};
+}}
+.step-content h3 {{
+  font-family: {hf};
+  font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;
+  color: {tp};
+}}
+.step-content p {{ color: {ts}; font-size: 0.95rem; }}"""
 
-/* ═══════════ FAQ (glassmorphism accordion) ═══════════ */
+    # ─── FAQ ───
+    if category == "stores":
+        faq_css = f"""
+.faq-list {{
+  max-width: 800px; margin: 0 auto; padding: 0 24px;
+  display: flex; flex-direction: column; gap: 12px;
+}}
+.faq-item {{
+  background: {card};
+  border: 1px solid {border};
+  border-radius: 8px; overflow: hidden;
+  transition: border-color 0.3s ease;
+  box-shadow: {t["card_shadow"]};
+}}
+.faq-item:hover {{ border-color: {accent}; }}
+.faq-question {{
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px; cursor: pointer; background: none; border: none;
+  font-family: {hf};
+  font-size: 1.05rem; font-weight: 600; color: {tp};
+  text-align: left; gap: 16px;
+}}
+.faq-question:hover {{ color: {accent}; }}
+.faq-arrow {{
+  font-size: 0.8rem; transition: transform 0.3s ease; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: {bg_alt};
+}}
+.faq-item.open .faq-arrow {{ transform: rotate(180deg); }}
+.faq-answer {{
+  max-height: 0; overflow: hidden;
+  transition: max-height 0.4s ease, padding 0.3s ease;
+}}
+.faq-answer-inner {{
+  padding: 0 24px 20px; color: {ts};
+  font-size: 0.95rem; line-height: 1.7; font-weight: 300;
+}}"""
+    elif category == "crypto":
+        faq_css = f"""
 .faq-list {{
   max-width: 800px; margin: 0 auto; padding: 0 24px;
   display: flex; flex-direction: column; gap: 12px;
@@ -490,7 +906,7 @@ section {{ padding: 100px 0; }}
 .faq-item {{
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   background: rgba(22,22,26,0.7);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid {border};
   border-radius: 14px; overflow: hidden;
   transition: border-color 0.3s ease;
 }}
@@ -498,11 +914,11 @@ section {{ padding: 100px 0; }}
 .faq-question {{
   width: 100%; display: flex; align-items: center; justify-content: space-between;
   padding: 20px 24px; cursor: pointer; background: none; border: none;
-  font-family: 'Inter', sans-serif;
-  font-size: 1.05rem; font-weight: 600; color: #EAEAEA;
+  font-family: {bf};
+  font-size: 1.05rem; font-weight: 600; color: {tp};
   text-align: left; gap: 16px;
 }}
-.faq-question:hover {{ color: {t["accent"]}; }}
+.faq-question:hover {{ color: {accent}; }}
 .faq-arrow {{
   font-size: 0.8rem; transition: transform 0.3s ease; flex-shrink: 0;
   width: 28px; height: 28px; border-radius: 50%;
@@ -515,11 +931,98 @@ section {{ padding: 100px 0; }}
   transition: max-height 0.4s ease, padding 0.3s ease;
 }}
 .faq-answer-inner {{
-  padding: 0 24px 20px; color: #9CA3AF;
+  padding: 0 24px 20px; color: {ts};
   font-size: 0.95rem; line-height: 1.7;
+}}"""
+    else:  # companies
+        faq_css = f"""
+.faq-list {{
+  max-width: 800px; margin: 0 auto; padding: 0 24px;
+  display: flex; flex-direction: column; gap: 12px;
 }}
+.faq-item {{
+  background: {card};
+  border: 1px solid {border};
+  border-radius: 8px; overflow: hidden;
+  transition: border-color 0.3s ease;
+  box-shadow: {t["card_shadow"]};
+}}
+.faq-item:hover {{ border-color: {accent}; }}
+.faq-question {{
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px; cursor: pointer; background: none; border: none;
+  font-family: {bf};
+  font-size: 1.05rem; font-weight: 600; color: {tp};
+  text-align: left; gap: 16px;
+}}
+.faq-question:hover {{ color: {accent}; }}
+.faq-arrow {{
+  font-size: 0.8rem; transition: transform 0.3s ease; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: {bg_alt};
+}}
+.faq-item.open .faq-arrow {{ transform: rotate(180deg); }}
+.faq-answer {{
+  max-height: 0; overflow: hidden;
+  transition: max-height 0.4s ease, padding 0.3s ease;
+}}
+.faq-answer-inner {{
+  padding: 0 24px 20px; color: {ts};
+  font-size: 0.95rem; line-height: 1.7;
+}}"""
 
-/* ═══════════ Contact (glassmorphism inputs) ═══════════ */
+    # ─── Contact ───
+    if category == "stores":
+        contact = f"""
+.contact-grid {{
+  display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
+  max-width: 900px; margin: 0 auto; padding: 0 24px; align-items: start;
+}}
+.contact-form {{ display: flex; flex-direction: column; gap: 16px; }}
+.contact-form input,
+.contact-form textarea {{
+  width: 100%; padding: 14px 18px; border-radius: 4px;
+  border: 1px solid {border};
+  background: {card}; color: {tp}; font-size: 0.95rem;
+  font-family: {bf};
+  transition: border-color 0.3s, box-shadow 0.3s;
+}}
+.contact-form input::placeholder,
+.contact-form textarea::placeholder {{ color: {ts}; font-weight: 300; }}
+.contact-form input:focus,
+.contact-form textarea:focus {{
+  outline: none; border-color: {accent};
+  box-shadow: 0 0 0 3px rgba({rgb},0.1);
+}}
+.contact-form textarea {{ resize: vertical; min-height: 120px; }}
+.contact-info {{ display: flex; flex-direction: column; gap: 24px; }}
+.contact-info h3 {{
+  font-family: {hf};
+  font-size: 1.3rem; font-weight: 600; color: {tp};
+}}
+.contact-info p {{ color: {ts}; line-height: 1.6; font-weight: 300; }}
+.contact-info .info-row {{
+  display: flex; align-items: center; gap: 12px;
+  color: {ts}; font-size: 0.95rem;
+}}
+.contact-info .info-row i {{ color: {accent}; font-size: 1rem; width: 20px; text-align: center; }}
+.contact-info .info-row a {{ color: {accent}; font-weight: 600; transition: opacity 0.3s; }}
+.contact-info .info-row a:hover {{ opacity: 0.7; }}
+.social-links {{ display: flex; gap: 12px; margin-top: 8px; }}
+.social-link {{
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid {border}; font-size: 1rem;
+  transition: all 0.3s; background: {card};
+  color: {ts};
+}}
+.social-link:hover {{
+  background: {tp}; color: {bg};
+  border-color: transparent; transform: translateY(-2px);
+}}"""
+    elif category == "crypto":
+        contact = f"""
 .contact-grid {{
   display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
   max-width: 900px; margin: 0 auto; padding: 0 24px; align-items: start;
@@ -528,55 +1031,148 @@ section {{ padding: 100px 0; }}
 .contact-form input,
 .contact-form textarea {{
   width: 100%; padding: 14px 18px; border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid {border};
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  background: rgba(22,22,26,0.7); color: #EAEAEA; font-size: 0.95rem;
-  font-family: 'Inter', sans-serif;
+  background: rgba(22,22,26,0.7); color: {tp}; font-size: 0.95rem;
+  font-family: {bf};
   transition: border-color 0.3s, box-shadow 0.3s;
 }}
 .contact-form input::placeholder,
-.contact-form textarea::placeholder {{ color: #9CA3AF; }}
+.contact-form textarea::placeholder {{ color: {ts}; }}
 .contact-form input:focus,
 .contact-form textarea:focus {{
-  outline: none; border-color: {t["accent"]};
-  box-shadow: 0 0 0 3px rgba({",".join(str(int(t["accent_start"].lstrip("#")[i:i+2], 16)) for i in (0, 2, 4))}, 0.15);
+  outline: none; border-color: {accent};
+  box-shadow: 0 0 0 3px rgba({rgb},0.15);
 }}
 .contact-form textarea {{ resize: vertical; min-height: 120px; }}
 .contact-info {{ display: flex; flex-direction: column; gap: 24px; }}
 .contact-info h3 {{
-  font-family: 'Inter', sans-serif;
-  font-size: 1.3rem; font-weight: 700; color: #EAEAEA;
+  font-family: {hf};
+  font-size: 1.3rem; font-weight: 700; color: {tp};
 }}
-.contact-info p {{ color: #9CA3AF; line-height: 1.6; }}
+.contact-info p {{ color: {ts}; line-height: 1.6; }}
 .contact-info .info-row {{
   display: flex; align-items: center; gap: 12px;
-  color: #9CA3AF; font-size: 0.95rem;
+  color: {ts}; font-size: 0.95rem;
 }}
-.contact-info .info-row i {{
-  color: {t["accent"]}; font-size: 1rem; width: 20px; text-align: center;
-}}
-.contact-info .info-row a {{
-  color: {t["accent"]}; font-weight: 600;
-  transition: opacity 0.3s;
-}}
+.contact-info .info-row i {{ color: {accent}; font-size: 1rem; width: 20px; text-align: center; }}
+.contact-info .info-row a {{ color: {accent}; font-weight: 600; transition: opacity 0.3s; }}
 .contact-info .info-row a:hover {{ opacity: 0.8; }}
 .social-links {{ display: flex; gap: 12px; margin-top: 8px; }}
 .social-link {{
   width: 44px; height: 44px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(255,255,255,0.08); font-size: 1.1rem;
+  border: 1px solid {border}; font-size: 1.1rem;
   transition: all 0.3s; background: rgba(22,22,26,0.7);
-  color: #9CA3AF;
+  color: {ts};
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }}
 .social-link:hover {{
   background: {t["gradient"]}; color: #0B0B0E;
   border-color: transparent; transform: translateY(-2px);
+}}"""
+    else:  # companies
+        contact = f"""
+.contact-grid {{
+  display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
+  max-width: 900px; margin: 0 auto; padding: 0 24px; align-items: start;
 }}
+.contact-form {{ display: flex; flex-direction: column; gap: 16px; }}
+.contact-form input,
+.contact-form textarea {{
+  width: 100%; padding: 14px 18px; border-radius: 6px;
+  border: 1px solid {border};
+  background: {card}; color: {tp}; font-size: 0.95rem;
+  font-family: {bf};
+  transition: border-color 0.3s, box-shadow 0.3s;
+}}
+.contact-form input::placeholder,
+.contact-form textarea::placeholder {{ color: {ts}; }}
+.contact-form input:focus,
+.contact-form textarea:focus {{
+  outline: none; border-color: {accent};
+  box-shadow: 0 0 0 3px rgba({rgb},0.1);
+}}
+.contact-form textarea {{ resize: vertical; min-height: 120px; }}
+.contact-info {{ display: flex; flex-direction: column; gap: 24px; }}
+.contact-info h3 {{
+  font-family: {bf};
+  font-size: 1.3rem; font-weight: 700; color: {tp};
+}}
+.contact-info p {{ color: {ts}; line-height: 1.6; }}
+.contact-info .info-row {{
+  display: flex; align-items: center; gap: 12px;
+  color: {ts}; font-size: 0.95rem;
+}}
+.contact-info .info-row i {{ color: {accent}; font-size: 1rem; width: 20px; text-align: center; }}
+.contact-info .info-row a {{ color: {accent}; font-weight: 600; transition: opacity 0.3s; }}
+.contact-info .info-row a:hover {{ opacity: 0.8; }}
+.social-links {{ display: flex; gap: 12px; margin-top: 8px; }}
+.social-link {{
+  width: 44px; height: 44px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid {border}; font-size: 1rem;
+  transition: all 0.3s; background: {card};
+  color: {ts};
+}}
+.social-link:hover {{
+  background: {accent}; color: #FFFFFF;
+  border-color: transparent; transform: translateY(-2px);
+}}"""
 
-/* ═══════════ Footer ═══════════ */
+    # ─── Footer ───
+    ft_bg = t["footer_bg"]
+    ft_text = t["footer_text"]
+    if category == "stores":
+        footer = f"""
 .footer {{
-  background: #07070A; color: #9CA3AF;
+  background: {ft_bg}; color: {ft_text};
+  padding: 64px 0 32px;
+}}
+.footer-grid {{
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px;
+  max-width: 1200px; margin: 0 auto; padding: 0 24px 40px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}}
+.footer-brand .logo {{
+  font-family: {hf};
+  font-size: 1.3rem; font-weight: 600; margin-bottom: 12px;
+  color: #FFFFFF; display: flex; align-items: center; gap: 8px;
+}}
+.footer-brand .logo i {{ color: {accent}; }}
+.footer-brand p {{ color: rgba(255,255,255,0.4); font-size: 0.9rem; line-height: 1.6; max-width: 280px; }}
+.footer-col h4 {{
+  font-family: {hf};
+  font-size: 0.9rem; font-weight: 600; margin-bottom: 16px;
+  color: rgba(255,255,255,0.8);
+}}
+.footer-col a {{
+  display: block; font-size: 0.85rem; color: rgba(255,255,255,0.4);
+  margin-bottom: 10px; transition: color 0.3s;
+}}
+.footer-col a:hover {{ color: {accent}; }}
+.footer-social {{ display: flex; gap: 10px; margin-top: 16px; }}
+.footer-social a {{
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.5); font-size: 0.95rem;
+  transition: all 0.3s;
+}}
+.footer-social a:hover {{
+  color: #FFFFFF; border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.05);
+}}
+.footer-bottom {{
+  max-width: 1200px; margin: 0 auto; padding: 24px 24px 0;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}}
+.footer-bottom p {{ font-size: 0.8rem; color: rgba(255,255,255,0.3); }}"""
+    elif category == "crypto":
+        footer = f"""
+.footer {{
+  background: {ft_bg}; color: {ft_text};
   padding: 64px 0 32px;
 }}
 .footer-grid {{
@@ -585,14 +1181,14 @@ section {{ padding: 100px 0; }}
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }}
 .footer-brand .logo {{
-  font-family: 'Inter', sans-serif;
+  font-family: {hf};
   font-size: 1.3rem; font-weight: 700; margin-bottom: 12px;
-  color: #EAEAEA; display: flex; align-items: center; gap: 8px;
+  color: {tp}; display: flex; align-items: center; gap: 8px;
 }}
-.footer-brand .logo i {{ color: {t["accent"]}; }}
+.footer-brand .logo i {{ color: {accent}; }}
 .footer-brand p {{ color: rgba(255,255,255,0.5); font-size: 0.9rem; line-height: 1.6; max-width: 280px; }}
 .footer-col h4 {{
-  font-family: 'Inter', sans-serif;
+  font-family: {bf};
   font-size: 0.9rem; font-weight: 700; margin-bottom: 16px;
   color: rgba(255,255,255,0.85);
 }}
@@ -600,17 +1196,17 @@ section {{ padding: 100px 0; }}
   display: block; font-size: 0.85rem; color: rgba(255,255,255,0.45);
   margin-bottom: 10px; transition: color 0.3s;
 }}
-.footer-col a:hover {{ color: {t["accent"]}; }}
+.footer-col a:hover {{ color: {accent}; }}
 .footer-social {{ display: flex; gap: 10px; margin-top: 16px; }}
 .footer-social a {{
   width: 36px; height: 36px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
   border: 1px solid rgba(255,255,255,0.08);
-  color: #9CA3AF; font-size: 0.95rem;
+  color: {ft_text}; font-size: 0.95rem;
   transition: all 0.3s;
 }}
 .footer-social a:hover {{
-  color: #EAEAEA; border-color: rgba(255,255,255,0.15);
+  color: {tp}; border-color: rgba(255,255,255,0.15);
   background: rgba(255,255,255,0.05);
 }}
 .footer-bottom {{
@@ -618,227 +1214,277 @@ section {{ padding: 100px 0; }}
   display: flex; justify-content: space-between; align-items: center;
   flex-wrap: wrap; gap: 16px;
 }}
-.footer-bottom p {{
-  font-size: 0.8rem; color: rgba(255,255,255,0.35);
+.footer-bottom p {{ font-size: 0.8rem; color: rgba(255,255,255,0.35); }}"""
+    else:  # companies
+        footer = f"""
+.footer {{
+  background: {ft_bg}; color: {ft_text};
+  padding: 64px 0 32px;
 }}
+.footer-grid {{
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px;
+  max-width: 1200px; margin: 0 auto; padding: 0 24px 40px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}}
+.footer-brand .logo {{
+  font-family: {bf};
+  font-size: 1.3rem; font-weight: 700; margin-bottom: 12px;
+  color: #FFFFFF; display: flex; align-items: center; gap: 8px;
+}}
+.footer-brand .logo i {{ color: {accent}; }}
+.footer-brand p {{ color: rgba(255,255,255,0.5); font-size: 0.9rem; line-height: 1.6; max-width: 280px; }}
+.footer-col h4 {{
+  font-family: {bf};
+  font-size: 0.9rem; font-weight: 700; margin-bottom: 16px;
+  color: rgba(255,255,255,0.9);
+}}
+.footer-col a {{
+  display: block; font-size: 0.85rem; color: rgba(255,255,255,0.5);
+  margin-bottom: 10px; transition: color 0.3s;
+}}
+.footer-col a:hover {{ color: {accent}; }}
+.footer-social {{ display: flex; gap: 10px; margin-top: 16px; }}
+.footer-social a {{
+  width: 36px; height: 36px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6); font-size: 0.95rem;
+  transition: all 0.3s;
+}}
+.footer-social a:hover {{
+  color: #FFFFFF; border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.05);
+}}
+.footer-bottom {{
+  max-width: 1200px; margin: 0 auto; padding: 24px 24px 0;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}}
+.footer-bottom p {{ font-size: 0.8rem; color: rgba(255,255,255,0.35); }}"""
 
-/* ═══════════ Modal ═══════════ */
+    # ─── Modal ───
+    modal = f"""
 .modal-overlay {{
   position: fixed; inset: 0; z-index: 2000;
-  background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
 }}
 .modal-overlay.active {{ opacity: 1; pointer-events: auto; }}
 .modal {{
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  background: rgba(22,22,26,0.9);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 20px; padding: 48px; max-width: 420px; width: 90%; text-align: center;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  background: {t["modal_bg"]};
+  border: 1px solid {border};
+  border-radius: {"20px" if category == "crypto" else "12px"};
+  padding: 48px; max-width: 420px; width: 90%; text-align: center;
+  box-shadow: {t["modal_shadow"]};
   transform: scale(0.9); transition: transform 0.3s ease;
 }}
 .modal-overlay.active .modal {{ transform: scale(1); }}
 .modal .modal-icon {{
   width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 20px;
   display: flex; align-items: center; justify-content: center;
-  background: {t["gradient"]}; color: #0B0B0E; font-size: 1.5rem;
+  background: {t["gradient"]}; {"color: #0B0B0E;" if category == "crypto" else f"color: #FFFFFF;"}
+  font-size: 1.5rem;
 }}
 .modal h3 {{
   font-size: 1.5rem; margin-bottom: 12px;
-  font-family: 'Inter', sans-serif; color: #EAEAEA;
+  font-family: {hf}; color: {tp};
 }}
-.modal p {{ color: #9CA3AF; margin-bottom: 24px; line-height: 1.6; }}
-.modal .btn {{ min-width: 140px; }}
+.modal p {{ color: {ts}; margin-bottom: 24px; line-height: 1.6; }}
+.modal .btn {{ min-width: 140px; }}"""
 
-/* ═══════════ Fade Animations ═══════════ */
+    # ─── Animations, mobile menu, responsive ───
+    animations = f"""
 .fade-up {{
   opacity: 0; transform: translateY(30px);
   transition: opacity 0.6s ease, transform 0.6s ease;
 }}
-.fade-up.visible {{ opacity: 1; transform: translateY(0); }}
+.fade-up.visible {{ opacity: 1; transform: translateY(0); }}"""
 
-/* ═══════════ Mobile Menu ═══════════ */
+    mobile_menu = f"""
 .mobile-menu {{
   position: fixed; top: 72px; left: 0; right: 0; z-index: 999;
   background: {t["nav_bg"]}; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid {border};
   transform: translateY(-100%); opacity: 0;
   transition: all 0.4s ease; pointer-events: none;
 }}
 .mobile-menu.active {{ transform: translateY(0); opacity: 1; pointer-events: auto; }}
 .mobile-menu a {{
   display: block; padding: 16px 24px; font-size: 1rem;
-  color: #9CA3AF; border-bottom: 1px solid rgba(255,255,255,0.06);
+  color: {ts}; border-bottom: 1px solid {border};
   transition: all 0.3s;
 }}
-.mobile-menu a:hover {{ color: #EAEAEA; padding-left: 32px; }}
+.mobile-menu a:hover {{ color: {tp}; padding-left: 32px; }}"""
 
-/* ═══════════ Responsive ═══════════ */
-@media (max-width: 1024px) {{
-  .hero-grid {{ grid-template-columns: 1fr; text-align: center; gap: 48px; }}
-  .hero-left {{ max-width: 100%; }}
-  .hero-left .hero-cta {{ justify-content: center; }}
-  .hero-stats {{ justify-content: center; }}
-  .hero-right {{ order: -1; }}
-  .hero-card-3d {{ max-width: 400px; }}
-  .killer-grid {{ grid-template-columns: 1fr; }}
-  .features-grid {{ grid-template-columns: repeat(2, 1fr); }}
-  .footer-grid {{ grid-template-columns: 1fr 1fr; }}
-  .contact-grid {{ grid-template-columns: 1fr; }}
-  .hero-stats {{ gap: 32px; }}
-}}
-@media (max-width: 768px) {{
-  .nav-links {{ display: none; }}
-  .burger {{ display: flex; }}
-  .hero-left h1 {{ font-size: clamp(1.8rem, 8vw, 2.5rem); }}
-  .features-grid {{ grid-template-columns: 1fr; }}
-  .footer-grid {{ grid-template-columns: 1fr; gap: 24px; }}
-  .footer-bottom {{ flex-direction: column; text-align: center; }}
-  section {{ padding: 72px 0; }}
-  .hero-stats {{ gap: 24px; }}
-  .step {{ flex-direction: column; align-items: center; text-align: center; }}
-  .step::before {{ display: none; }}
-  .killer-grid {{ gap: 40px; }}
-}}"""
+    responsive = """
+@media (max-width: 1024px) {
+  .hero-grid { grid-template-columns: 1fr; text-align: center; gap: 48px; }
+  .hero-left { max-width: 100%; }
+  .hero-left .hero-cta { justify-content: center; }
+  .hero-stats { justify-content: center; }
+  .hero-right { order: -1; }
+  .hero-card-3d { max-width: 400px; }
+  .killer-grid { grid-template-columns: 1fr; }
+  .features-grid { grid-template-columns: repeat(2, 1fr); }
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+  .contact-grid { grid-template-columns: 1fr; }
+  .hero-stats { gap: 32px; }
+}
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .burger { display: flex; }
+  .hero-left h1 { font-size: clamp(1.8rem, 8vw, 2.5rem); }
+  .features-grid { grid-template-columns: 1fr; }
+  .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+  .footer-bottom { flex-direction: column; text-align: center; }
+  section { padding: 72px 0; }
+  .hero-stats { gap: 24px; }
+  .step { flex-direction: column; align-items: center; text-align: center; }
+  .step::before { display: none; }
+  .killer-grid { gap: 40px; }
+}"""
+
+    return base + typo + btn + nav + hero + sections + about + features + killer + steps_css + faq_css + contact + footer + modal + animations + mobile_menu + responsive
 
 
 # ──────────────────────── JS Generator ────────────────────────
 
 def _generate_js(t: dict, category: str) -> str:
-    return r"""// ═══════════ Smooth Scroll ═══════════
-document.querySelectorAll('a[href^="#"]').forEach(function(a) {
-  a.addEventListener('click', function(e) {
+    shadow_color = "0 2px 20px rgba(0,0,0,0.3)" if category == "crypto" else "0 2px 20px rgba(0,0,0,0.06)"
+    return f"""// ═══════════ Smooth Scroll ═══════════
+document.querySelectorAll('a[href^="#"]').forEach(function(a) {{
+  a.addEventListener('click', function(e) {{
     e.preventDefault();
     var target = document.querySelector(this.getAttribute('href'));
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (target) {{
+      target.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
       closeMobileMenu();
-    }
-  });
-});
+    }}
+  }});
+}});
 
 // ═══════════ Burger Menu ═══════════
 var burger = document.querySelector('.burger');
 var mobileMenu = document.querySelector('.mobile-menu');
 
-burger.addEventListener('click', function() {
+burger.addEventListener('click', function() {{
   this.classList.toggle('active');
   mobileMenu.classList.toggle('active');
-});
+}});
 
-function closeMobileMenu() {
+function closeMobileMenu() {{
   if (burger) burger.classList.remove('active');
   if (mobileMenu) mobileMenu.classList.remove('active');
-}
+}}
 
 // ═══════════ FAQ Accordion ═══════════
-document.querySelectorAll('.faq-question').forEach(function(btn) {
-  btn.addEventListener('click', function() {
+document.querySelectorAll('.faq-question').forEach(function(btn) {{
+  btn.addEventListener('click', function() {{
     var item = this.closest('.faq-item');
     var answer = item.querySelector('.faq-answer');
     var inner = answer.querySelector('.faq-answer-inner');
     var isOpen = item.classList.contains('open');
 
-    document.querySelectorAll('.faq-item.open').forEach(function(openItem) {
+    document.querySelectorAll('.faq-item.open').forEach(function(openItem) {{
       openItem.classList.remove('open');
       openItem.querySelector('.faq-answer').style.maxHeight = '0';
-    });
+    }});
 
-    if (!isOpen) {
+    if (!isOpen) {{
       item.classList.add('open');
       answer.style.maxHeight = inner.scrollHeight + 20 + 'px';
-    }
-  });
-});
+    }}
+  }});
+}});
 
 // ═══════════ Modal ═══════════
 var overlay = document.getElementById('modal-overlay');
 
-function openModal() {
-  if (overlay) {
+function openModal() {{
+  if (overlay) {{
     overlay.classList.add('active');
     document.body.style.overflow = 'hidden';
-  }
-}
+  }}
+}}
 
-function closeModal() {
-  if (overlay) {
+function closeModal() {{
+  if (overlay) {{
     overlay.classList.remove('active');
     document.body.style.overflow = '';
-  }
-}
+  }}
+}}
 
-if (overlay) {
-  overlay.addEventListener('click', function(e) {
+if (overlay) {{
+  overlay.addEventListener('click', function(e) {{
     if (e.target === overlay) closeModal();
-  });
-}
+  }});
+}}
 
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function(e) {{
   if (e.key === 'Escape') closeModal();
-});
+}});
 
 // ═══════════ Contact Form Submit ═══════════
 var contactForm = document.getElementById('contact-form');
-if (contactForm) {
-  contactForm.addEventListener('submit', function(e) {
+if (contactForm) {{
+  contactForm.addEventListener('submit', function(e) {{
     e.preventDefault();
     openModal();
     this.reset();
-  });
-}
+  }});
+}}
 
 // ═══════════ CTA Scroll ═══════════
-document.querySelectorAll('[data-scroll]').forEach(function(el) {
-  el.addEventListener('click', function() {
+document.querySelectorAll('[data-scroll]').forEach(function(el) {{
+  el.addEventListener('click', function() {{
     var target = document.getElementById(this.getAttribute('data-scroll'));
-    if (target) target.scrollIntoView({ behavior: 'smooth' });
-  });
-});
+    if (target) target.scrollIntoView({{ behavior: 'smooth' }});
+  }});
+}});
 
 // ═══════════ Feature Cards Click ═══════════
-document.querySelectorAll('.feature-card').forEach(function(card) {
-  card.addEventListener('click', function() {
+document.querySelectorAll('.feature-card').forEach(function(card) {{
+  card.addEventListener('click', function() {{
     openModal();
-  });
-});
+  }});
+}});
 
 // ═══════════ Scroll Animations (Intersection Observer) ═══════════
-var observer = new IntersectionObserver(function(entries) {
-  entries.forEach(function(entry) {
-    if (entry.isIntersecting) {
+var observer = new IntersectionObserver(function(entries) {{
+  entries.forEach(function(entry) {{
+    if (entry.isIntersecting) {{
       entry.target.classList.add('visible');
       observer.unobserve(entry.target);
-    }
-  });
-}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+    }}
+  }});
+}}, {{ threshold: 0.1, rootMargin: '0px 0px -50px 0px' }});
 
-document.querySelectorAll('.fade-up').forEach(function(el) {
+document.querySelectorAll('.fade-up').forEach(function(el) {{
   observer.observe(el);
-});
+}});
 
 // ═══════════ Nav scroll shadow ═══════════
 var nav = document.querySelector('.nav');
-window.addEventListener('scroll', function() {
+window.addEventListener('scroll', function() {{
   var st = window.pageYOffset;
-  if (st > 100) {
-    nav.style.boxShadow = '0 2px 20px rgba(0,0,0,0.3)';
-  } else {
+  if (st > 100) {{
+    nav.style.boxShadow = '{shadow_color}';
+  }} else {{
     nav.style.boxShadow = 'none';
-  }
-}, { passive: true });
+  }}
+}}, {{ passive: true }});
 
 // ═══════════ Open first FAQ by default ═══════════
-(function() {
+(function() {{
   var first = document.querySelector('.faq-item');
-  if (first) {
+  if (first) {{
     first.classList.add('open');
     var ans = first.querySelector('.faq-answer');
     var inner = first.querySelector('.faq-answer-inner');
     ans.style.maxHeight = inner.scrollHeight + 20 + 'px';
-  }
-})();"""
+  }}
+}})();"""
 
 
 # ──────────────────────── HTML Generator ────────────────────────
@@ -860,12 +1506,13 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     meta_desc = subtitle
     meta_kw = SEO_KEYWORDS.get(category, "")
     brand_icon = t["icon"]
+    fonts_url = FONTS_URL.get(category, FONTS_URL["companies"])
+    ph_bg = t["placehold_bg"]
+    ph_fg = t["placehold_fg"]
 
-    # Build nav links HTML
     nav_links_html = "\n".join(f'        <a href="#{nid}">{label}</a>' for nid, label in nav_items)
     mobile_links_html = "\n".join(f'      <a href="#{nid}">{label}</a>' for nid, label in nav_items)
 
-    # Build features HTML (Font Awesome icon in icon-wrap div)
     features_html = "\n".join(
         f"""        <div class="feature-card fade-up">
           <div class="icon-wrap"><i class="{icon}"></i></div>
@@ -875,7 +1522,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         for icon, title, description in features
     )
 
-    # Build steps HTML
     steps_html = "\n".join(
         f"""        <div class="step fade-up">
           <div class="step-number">{i + 1}</div>
@@ -887,7 +1533,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         for i, (title, description) in enumerate(steps)
     )
 
-    # Build FAQ HTML
     faq_html = "\n".join(
         f"""        <div class="faq-item fade-up">
           <button class="faq-question">
@@ -901,7 +1546,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         for q, ans in faqs
     )
 
-    # Build stats HTML
     stats_html = "\n".join(
         f"""          <div class="hero-stat">
             <div class="number">{num}</div>
@@ -910,7 +1554,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         for num, lbl in stats
     )
 
-    # Build footer link columns
     col1_items = [("about", "About"), ("features", "Features"), ("how-it-works", "How It Works")]
     col2_items = [("killer", "Why Us"), ("faq", "FAQ"), ("contact", "Contact")]
     col3_items = [("about", "Careers"), ("#", "Blog"), ("#", "Changelog")]
@@ -920,7 +1563,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     col3_html = "\n".join(f'          <a href="{nid}">{label}</a>' for nid, label in col3_items)
     col4_html = "\n".join(f'          <a href="{nid}">{label}</a>' for nid, label in col4_items)
 
-    # About section content
     about_text = desc if len(desc) > 60 else f"{desc} {audience}"
     about_paragraphs = ""
     if about_text:
@@ -932,7 +1574,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         if p2 and len(p2) > 2:
             about_paragraphs += f"\n      <p>{p2}</p>"
 
-    # Derive domain from link
     domain = "example.com"
     if link and link not in ("#", ""):
         domain = link.replace("https://", "").replace("http://", "").split("/")[0]
@@ -950,7 +1591,7 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
   <meta property="og:type" content="website">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="{fonts_url}" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
 {css_content}
@@ -990,7 +1631,7 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
       </div>
       <div class="hero-right fade-up">
         <div class="hero-card-3d">
-          <img src="https://placehold.co/600x400/16161A/9CA3AF?text=Project" alt="{name} preview">
+          <img src="https://placehold.co/600x400/{ph_bg}/{ph_fg}?text=Project" alt="{name} preview">
           <div class="card-overlay">
             <h3>{name}</h3>
             <p>{_first_sentence(killer) if killer else subtitle}</p>
@@ -1005,44 +1646,38 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     <div class="container">
       <h2 class="section-title fade-up">About {name}</h2>
       <p class="section-subtitle fade-up">Redefining what's possible</p>
-      <div class="about-content">
 {about_paragraphs}
-      </div>
     </div>
   </section>
 
   <!-- Features -->
   <section id="features" class="section-dark">
-    <div class="container">
-      <h2 class="section-title fade-up">Features &amp; Benefits</h2>
-      <p class="section-subtitle fade-up">Everything you need, nothing you don't</p>
-    </div>
+    <h2 class="section-title fade-up">Features</h2>
+    <p class="section-subtitle fade-up">Everything you need, nothing you don't</p>
     <div class="features-grid">
 {features_html}
     </div>
   </section>
 
   <!-- Killer Feature -->
-  <section class="killer" id="killer">
-    <div class="killer-grid fade-up">
-      <div class="killer-image">
-        <img src="https://placehold.co/1200x500/16161A/9CA3AF?text=Killer+Feature" alt="{name} killer feature">
+  <section id="killer" class="killer">
+    <div class="killer-grid">
+      <div class="killer-image fade-up">
+        <img src="https://placehold.co/700x500/{ph_bg}/{ph_fg}?text=Feature" alt="Key feature">
         <div class="gradient-overlay"></div>
       </div>
-      <div class="killer-text">
-        <h2>Why {name}?</h2>
-        <p>{killer or subtitle}</p>
-        <button class="btn btn-primary" data-scroll="contact">Get Started Today</button>
+      <div class="killer-text fade-up">
+        <h2>Why Choose Us</h2>
+        <p>{killer if killer else "We deliver exceptional quality and unmatched value. Our commitment to excellence sets us apart from everything else in the market."}</p>
+        <button class="btn btn-primary" data-scroll="how-it-works">Get Started</button>
       </div>
     </div>
   </section>
 
   <!-- How It Works -->
   <section id="how-it-works" class="section-alt">
-    <div class="container">
-      <h2 class="section-title fade-up">How It Works</h2>
-      <p class="section-subtitle fade-up">Get started in just a few simple steps</p>
-    </div>
+    <h2 class="section-title fade-up">How It Works</h2>
+    <p class="section-subtitle fade-up">Simple steps to get started</p>
     <div class="steps-container">
 {steps_html}
     </div>
@@ -1050,10 +1685,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
 
   <!-- FAQ -->
   <section id="faq" class="section-dark">
-    <div class="container">
-      <h2 class="section-title fade-up">Frequently Asked Questions</h2>
-      <p class="section-subtitle fade-up">Got questions? We've got answers</p>
-    </div>
+    <h2 class="section-title fade-up">Frequently Asked Questions</h2>
+    <p class="section-subtitle fade-up">Got questions? We have answers</p>
     <div class="faq-list">
 {faq_html}
     </div>
@@ -1061,27 +1694,30 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
 
   <!-- Contact -->
   <section id="contact" class="section-alt">
-    <div class="container">
-      <h2 class="section-title fade-up">Get In Touch</h2>
-      <p class="section-subtitle fade-up">We'd love to hear from you</p>
-    </div>
+    <h2 class="section-title fade-up">Get In Touch</h2>
+    <p class="section-subtitle fade-up">We'd love to hear from you</p>
     <div class="contact-grid">
       <form class="contact-form fade-up" id="contact-form">
-        <input type="text" name="name" placeholder="Your Name" required aria-label="Your Name">
-        <input type="email" name="email" placeholder="Your Email" required aria-label="Your Email">
-        <textarea name="message" placeholder="Your Message" required aria-label="Your Message"></textarea>
+        <input type="text" placeholder="Your Name" required>
+        <input type="email" placeholder="Email Address" required>
+        <textarea placeholder="Your Message" rows="4"></textarea>
         <button type="submit" class="btn btn-primary">Send Message</button>
       </form>
       <div class="contact-info fade-up">
-        <h3>Contact Information</h3>
-        <p>Have a question or want to learn more? Reach out and our team will get back to you within 24 hours.</p>
-        <div class="info-row"><i class="fa-solid fa-globe"></i> <a href="{link}">{link}</a></div>
-        <div class="info-row"><i class="fa-solid fa-envelope"></i> hello@{domain}</div>
+        <h3>Contact Info</h3>
+        <p>We're here to help with any questions about our products, services, or anything else.</p>
+        <div class="info-row">
+          <i class="fa-solid fa-envelope"></i>
+          <span>hello@{domain}</span>
+        </div>
+        <div class="info-row">
+          <i class="fa-solid fa-globe"></i>
+          <a href="{link}" target="_blank">{domain}</a>
+        </div>
         <div class="social-links">
           <a href="#" class="social-link" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
           <a href="#" class="social-link" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
           <a href="#" class="social-link" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
-          <a href="#" class="social-link" aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
         </div>
       </div>
     </div>
@@ -1092,12 +1728,11 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     <div class="footer-grid">
       <div class="footer-brand">
         <div class="logo"><i class="{brand_icon}"></i> {name}</div>
-        <p>{subtitle}</p>
+        <p>{_first_sentence(desc) if desc else "Building the future, one step at a time."}</p>
         <div class="footer-social">
           <a href="#" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
-          <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
-          <a href="#" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
           <a href="#" aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
+          <a href="#" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
         </div>
       </div>
       <div class="footer-col">
@@ -1107,7 +1742,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
       <div class="footer-col">
         <h4>Company</h4>
 {col2_html}
-{col3_html}
       </div>
       <div class="footer-col">
         <h4>Legal</h4>
@@ -1115,7 +1749,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
       </div>
     </div>
     <div class="footer-bottom">
-      <p>&copy; 2024 {name}. All rights reserved.</p>
+      <p>&copy; 2025 {name}. All rights reserved.</p>
+      <p>Built with passion.</p>
     </div>
   </footer>
 
@@ -1124,7 +1759,7 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     <div class="modal">
       <div class="modal-icon"><i class="fa-solid fa-check"></i></div>
       <h3>Thank You!</h3>
-      <p>Your message has been received. We'll get back to you shortly.</p>
+      <p>Your message has been received. We'll get back to you within 24 hours.</p>
       <button class="btn btn-primary" onclick="closeModal()">Close</button>
     </div>
   </div>
@@ -1138,8 +1773,7 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     return html
 
 
-
-# ──────────────────────── Main API ═───────────────────────
+# ──────────────────────── Main API ═══════════
 
 def generate_premium_site(
     name: str,
@@ -1149,15 +1783,14 @@ def generate_premium_site(
     category: str = "companies",
     site_analysis: dict | None = None,
 ) -> tuple[str, str, str]:
-    """Generate a premium dark-themed website. Returns (html, css, js)."""
+    """Generate a premium website with category-specific design.
+    Returns (html, css, js) where CSS and JS are empty (inlined in HTML)."""
 
-    # Resolve category, defaulting to "companies"
     if category not in THEMES:
         category = "companies"
 
     t = THEMES[category]
 
-    # Build analysis dict from positional args if no analysis dict was given
     a = analysis or {}
     if not a.get("name"):
         a["name"] = name
@@ -1168,7 +1801,6 @@ def generate_premium_site(
 
     css = _generate_css(t, category)
     js = _generate_js(t, category)
-    # Inline CSS and JS directly into the HTML — single self-contained file
     html = _generate_html(t, category, a, site_analysis or {},
                          css_content=css, js_content=js)
 
