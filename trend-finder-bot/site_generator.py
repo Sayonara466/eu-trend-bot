@@ -1688,25 +1688,25 @@ def _build_promo_html(category: str, products: list, t: dict, ph_bg: str, ph_fg:
         return ""
     p = products[0]  # Use the first product as the promo item
     img_src = p.get("image", "")
-    prod_name = p.get("name", "Featured Product")
+    prod_name = p.get("name", "Выбранный товар")
     price_raw = p.get("price", "")
     # Calculate discounted price (30% off)
-    old_price = price_raw if price_raw else "$199.00"
-    new_price = price_raw if price_raw else "$139.30"
+    old_price = price_raw if price_raw else "€199.00"
+    new_price = price_raw if price_raw else "€139.30"
     if price_raw:
         import re as _re
         nums = _re.findall(r"[\d.,]+", price_raw.replace(",", "."))
         if nums:
             try:
                 val = float(nums[0].replace(",", ""))
-                currency_sym = price_raw.strip()[0] if price_raw.strip()[0] in "€$£₽" else ""
+                currency_sym = price_raw.strip()[0] if price_raw.strip()[0] in "€$£₽" else "€"
                 discounted = val * 0.7
                 new_price = f"{currency_sym}{discounted:.2f}"
             except (ValueError, IndexError):
                 pass
     else:
-        old_price = "$199.00"
-        new_price = "$139.30"
+        old_price = "€199.00"
+        new_price = "€139.30"
     return f"""
   <section class="promo" id="promo">
     <div class="promo-inner">
@@ -1715,14 +1715,14 @@ def _build_promo_html(category: str, products: list, t: dict, ph_bg: str, ph_fg:
         <span class="promo-badge">-30%</span>
       </div>
       <div class="promo-text fade-up">
-        <h2>Special Offer</h2>
-        <p class="promo-subtitle">{prod_name} is now available at an exclusive price. Limited time only.</p>
+        <h2>Акция</h2>
+        <p class="promo-subtitle">{prod_name} — по эксклюзивной цене. Только сейчас.</p>
         <div class="promo-prices">
           <span class="promo-old-price">{old_price}</span>
           <span class="promo-new-price">{new_price}</span>
           <span class="promo-discount">-30%</span>
         </div>
-        <button class="btn btn-primary" data-scroll="catalog">Browse Catalog</button>
+        <button class="btn btn-primary" data-scroll="catalog">В каталог</button>
       </div>
     </div>
   </section>"""
@@ -1735,20 +1735,20 @@ def _build_catalog_html(category: str, products: list, t: dict, ph_bg: str, ph_f
     cards_html = "\n".join(
         f"""      <div class="product-card fade-up">
         <div class="product-card-img">
-          <img src="{p.get('image', f'https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product')}" alt="{p.get('name', 'Product')}">
+          <img src="{p.get('image', f'https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product')}" alt="{p.get('name', 'Товар')}">
         </div>
         <div class="product-card-body">
-          <div class="product-card-name">{p.get('name', 'Product')}</div>
+          <div class="product-card-name">{p.get('name', 'Товар')}</div>
           <div class="product-card-price">{p.get('price', '')}</div>
-          <button class="btn-cart"><i class="fa-solid fa-bag-shopping"></i> Add to Cart</button>
+          <button class="btn-cart"><i class="fa-solid fa-bag-shopping"></i> В корзину</button>
         </div>
       </div>"""
         for p in products
     )
     return f"""
   <section class="catalog" id="catalog">
-    <h2 class="section-title fade-up">Our Collection</h2>
-    <p class="section-subtitle fade-up">Discover our curated selection of premium pieces</p>
+    <h2 class="section-title fade-up">Каталог</h2>
+    <p class="section-subtitle fade-up">Откройте для себя нашу коллекцию</p>
     <div class="catalog-grid">
 {cards_html}
     </div>
@@ -1764,9 +1764,9 @@ def _build_cart_modal_html(category: str) -> str:
   <div class="modal-overlay" id="cart-modal-overlay">
     <div class="modal cart-modal-content">
       <div class="modal-icon"><i class="fa-solid fa-bag-shopping"></i></div>
-      <div class="cart-product-name" id="cart-product-name">Item</div>
-      <p class="cart-modal-text">Added to your cart!</p>
-      <button class="btn btn-primary" onclick="closeCartModal()">Continue Shopping</button>
+      <div class="cart-product-name" id="cart-product-name">Товар</div>
+      <p class="cart-modal-text">Товар добавлен в корзину!</p>
+      <button class="btn btn-primary" onclick="closeCartModal()">Продолжить покупки</button>
     </div>
   </div>"""
 
