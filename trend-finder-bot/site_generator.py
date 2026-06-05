@@ -238,9 +238,14 @@ def _stats(category: str, analysis: dict) -> list:
     return DEFAULT_STATS.get(category, DEFAULT_STATS["companies"])
 
 
-def _nav_items() -> list[tuple[str, str]]:
-    return [("about", "About"), ("features", "Features"), ("killer", "Why Us"),
+def _nav_items(category: str = "companies") -> list[tuple[str, str]]:
+    items = [("about", "About"), ("features", "Features"), ("killer", "Why Us"),
             ("how-it-works", "How It Works"), ("faq", "FAQ"), ("contact", "Contact")]
+    if category == "stores":
+        # Insert Catalog after Features
+        items = [("about", "About"), ("features", "Features"), ("catalog", "Catalog"),
+                ("killer", "Why Us"), ("how-it-works", "How It Works"), ("faq", "FAQ"), ("contact", "Contact")]
+    return items
 
 
 # ──────────────────────── CSS Generator (per category) ────────────────────────
@@ -1345,7 +1350,159 @@ section {{ padding: 100px 0; }}
   .killer-grid { gap: 40px; }
 }"""
 
-    return base + typo + btn + nav + hero + sections + about + features + killer + steps_css + faq_css + contact + footer + modal + animations + mobile_menu + responsive
+    # ─── Promo block (stores only) ───
+    promo_css = ""
+    if category == "stores":
+        promo_css = f"""
+.promo {{
+  padding: 80px 24px;
+  background: {bg_alt};
+  position: relative;
+  overflow: hidden;
+}}
+.promo-inner {{
+  max-width: 1100px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 48px; align-items: center;
+}}
+.promo-image {{
+  position: relative; border-radius: 8px; overflow: hidden;
+  border: 1px solid {border};
+  box-shadow: 0 16px 48px rgba(0,0,0,0.08);
+}}
+.promo-image img {{
+  width: 100%; height: auto; display: block;
+  background: {bg}; min-height: 320px; object-fit: cover;
+}}
+.promo-badge {{
+  position: absolute; top: 16px; left: 16px;
+  background: #D4443B; color: #FFF;
+  font-family: {bf}; font-size: 0.75rem; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+  padding: 6px 14px; border-radius: 4px;
+}}
+.promo-text h2 {{
+  font-family: {hf}; font-size: clamp(1.6rem, 3vw, 2.2rem);
+  color: {tp}; margin-bottom: 12px; font-weight: 600;
+}}
+.promo-text .promo-subtitle {{
+  font-size: 0.95rem; color: {ts}; margin-bottom: 20px; font-weight: 300; line-height: 1.6;
+}}
+.promo-prices {{
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 28px;
+}}
+.promo-old-price {{
+  font-size: 1.4rem; color: {ts};
+  text-decoration: line-through; font-weight: 300;
+}}
+.promo-new-price {{
+  font-size: 2rem; color: #D4443B; font-weight: 700;
+  font-family: {hf};
+}}
+.promo-discount {{
+  display: inline-block; background: rgba(212,68,59,0.1);
+  color: #D4443B; font-size: 0.8rem; font-weight: 600;
+  padding: 4px 10px; border-radius: 4px; margin-left: 8px;
+}}"""
+
+    # ─── Catalog grid (stores only) ───
+    catalog_css = ""
+    if category == "stores":
+        catalog_css = f"""
+.catalog {{
+  padding: 100px 24px;
+  background: {bg};
+}}
+.catalog-grid {{
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 28px; max-width: 1200px; margin: 0 auto;
+}}
+.product-card {{
+  background: {card};
+  border: 1px solid {border};
+  border-radius: 8px; overflow: hidden;
+  transition: transform 0.4s cubic-bezier(0.23,1,0.32,1), box-shadow 0.4s ease;
+  box-shadow: {t["card_shadow"]};
+  display: flex; flex-direction: column;
+}}
+.product-card:hover {{
+  transform: translateY(-6px);
+  box-shadow: {t["card_shadow_hover"]};
+}}
+.product-card-img {{
+  position: relative; overflow: hidden;
+  background: {bg_alt};
+}}
+.product-card-img img {{
+  width: 100%; height: 280px; object-fit: cover;
+  display: block; transition: transform 0.5s ease;
+}}
+.product-card:hover .product-card-img img {{
+  transform: scale(1.05);
+}}
+.product-card-body {{
+  padding: 20px; flex: 1;
+  display: flex; flex-direction: column;
+}}
+.product-card-name {{
+  font-family: {hf}; font-size: 1rem; font-weight: 600;
+  color: {tp}; margin-bottom: 8px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden;
+}}
+.product-card-price {{
+  font-size: 1.15rem; font-weight: 600;
+  color: {tp}; margin-top: auto; margin-bottom: 16px;
+}}
+.btn-cart {{
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 12px 20px; border-radius: 4px;
+  font-weight: 500; font-size: 0.85rem; cursor: pointer;
+  border: 1.5px solid {tp}; background: transparent;
+  color: {tp}; transition: all 0.3s ease;
+  font-family: {bf}; letter-spacing: 0.5px; text-transform: uppercase;
+}}
+.btn-cart:hover {{
+  background: {tp}; color: #FFFBF5; transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}}"""
+
+    # ─── Cart modal (stores only) ───
+    cart_modal_css = ""
+    if category == "stores":
+        cart_modal_css = f"""
+.cart-modal-content {{
+  text-align: center;
+}}
+.cart-modal-content .modal-icon {{
+  background: {t["gradient"]}; color: #FFFFFF;
+}}
+.cart-modal-content .cart-product-name {{
+  font-family: {hf}; font-size: 1.1rem; color: {tp};
+  margin-bottom: 4px; font-weight: 600;
+}}
+.cart-modal-content .cart-modal-text {{
+  color: {ts}; font-size: 0.95rem; margin-bottom: 24px; line-height: 1.5;
+}}"""
+
+    # ─── Responsive additions for promo + catalog ───
+    promo_resp = ""
+    if category == "stores":
+        promo_resp = """
+@media (max-width: 1024px) {
+  .promo-inner { grid-template-columns: 1fr; text-align: center; }
+  .promo-prices { justify-content: center; }
+  .catalog-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .catalog-grid { grid-template-columns: 1fr; }
+  .promo-image img { min-height: 240px; }
+  .product-card-img img { height: 220px; }
+}"""
+
+    return (base + typo + btn + nav + hero + sections + about + features
+            + killer + steps_css + faq_css + contact + footer + modal
+            + animations + mobile_menu + promo_css + catalog_css + cart_modal_css + promo_resp + responsive)
 
 
 # ──────────────────────── JS Generator ────────────────────────
@@ -1484,13 +1641,140 @@ window.addEventListener('scroll', function() {{
     var inner = first.querySelector('.faq-answer-inner');
     ans.style.maxHeight = inner.scrollHeight + 20 + 'px';
   }}
-}})();"""
+}})();
+
+// ═══════════ Cart Modal (stores) ═══════════
+var cartOverlay = document.getElementById('cart-modal-overlay');
+var cartProductName = document.getElementById('cart-product-name');
+
+function openCartModal(productName) {{
+  if (cartOverlay) {{
+    if (cartProductName && productName) {{
+      cartProductName.textContent = productName;
+    }}
+    cartOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() {{ closeCartModal(); }}, 2500);
+  }}
+}}
+
+function closeCartModal() {{
+  if (cartOverlay) {{
+    cartOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }}
+}}
+
+if (cartOverlay) {{
+  cartOverlay.addEventListener('click', function(e) {{
+    if (e.target === cartOverlay) closeCartModal();
+  }});
+}}
+
+document.querySelectorAll('.btn-cart').forEach(function(btn) {{
+  btn.addEventListener('click', function() {{
+    var card = this.closest('.product-card');
+    var name = card ? card.querySelector('.product-card-name').textContent : 'Item';
+    openCartModal(name);
+  }});
+}});"""
+
+
+# ──────────────────────── HTML Generators for Store Sections ────────────────────────
+
+def _build_promo_html(category: str, products: list, t: dict, ph_bg: str, ph_fg: str) -> str:
+    """Build the promo/sale block HTML (stores only). Empty string for other categories."""
+    if category != "stores" or not products:
+        return ""
+    p = products[0]  # Use the first product as the promo item
+    img_src = p.get("image", "")
+    prod_name = p.get("name", "Featured Product")
+    price_raw = p.get("price", "")
+    # Calculate discounted price (30% off)
+    old_price = price_raw if price_raw else "$199.00"
+    new_price = price_raw if price_raw else "$139.30"
+    if price_raw:
+        import re as _re
+        nums = _re.findall(r"[\d.,]+", price_raw.replace(",", "."))
+        if nums:
+            try:
+                val = float(nums[0].replace(",", ""))
+                currency_sym = price_raw.strip()[0] if price_raw.strip()[0] in "€$£₽" else ""
+                discounted = val * 0.7
+                new_price = f"{currency_sym}{discounted:.2f}"
+            except (ValueError, IndexError):
+                pass
+    else:
+        old_price = "$199.00"
+        new_price = "$139.30"
+    return f"""
+  <section class="promo" id="promo">
+    <div class="promo-inner">
+      <div class="promo-image fade-up">
+        <img src="{img_src if img_src else f'https://placehold.co/600x500/{ph_bg}/{ph_fg}?text=Sale'}" alt="{prod_name}">
+        <span class="promo-badge">-30%</span>
+      </div>
+      <div class="promo-text fade-up">
+        <h2>Special Offer</h2>
+        <p class="promo-subtitle">{prod_name} is now available at an exclusive price. Limited time only.</p>
+        <div class="promo-prices">
+          <span class="promo-old-price">{old_price}</span>
+          <span class="promo-new-price">{new_price}</span>
+          <span class="promo-discount">-30%</span>
+        </div>
+        <button class="btn btn-primary" data-scroll="catalog">Browse Catalog</button>
+      </div>
+    </div>
+  </section>"""
+
+
+def _build_catalog_html(category: str, products: list, t: dict, ph_bg: str, ph_fg: str) -> str:
+    """Build the full product catalog HTML (stores only). Empty string for other categories."""
+    if category != "stores" or not products:
+        return ""
+    cards_html = "\n".join(
+        f"""      <div class="product-card fade-up">
+        <div class="product-card-img">
+          <img src="{p.get('image', f'https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product')}" alt="{p.get('name', 'Product')}">
+        </div>
+        <div class="product-card-body">
+          <div class="product-card-name">{p.get('name', 'Product')}</div>
+          <div class="product-card-price">{p.get('price', '')}</div>
+          <button class="btn-cart"><i class="fa-solid fa-bag-shopping"></i> Add to Cart</button>
+        </div>
+      </div>"""
+        for p in products
+    )
+    return f"""
+  <section class="catalog" id="catalog">
+    <h2 class="section-title fade-up">Our Collection</h2>
+    <p class="section-subtitle fade-up">Discover our curated selection of premium pieces</p>
+    <div class="catalog-grid">
+{cards_html}
+    </div>
+  </section>"""
+
+
+def _build_cart_modal_html(category: str) -> str:
+    """Build the cart modal HTML (stores only). Empty string for other categories."""
+    if category != "stores":
+        return ""
+    return """
+  <!-- Cart Modal -->
+  <div class="modal-overlay" id="cart-modal-overlay">
+    <div class="modal cart-modal-content">
+      <div class="modal-icon"><i class="fa-solid fa-bag-shopping"></i></div>
+      <div class="cart-product-name" id="cart-product-name">Item</div>
+      <p class="cart-modal-text">Added to your cart!</p>
+      <button class="btn btn-primary" onclick="closeCartModal()">Continue Shopping</button>
+    </div>
+  </div>"""
 
 
 # ──────────────────────── HTML Generator ────────────────────────
 
 def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
-                 css_content: str = "", js_content: str = "") -> str:
+                 css_content: str = "", js_content: str = "", products: list | None = None) -> str:
     a = analysis or {}
     name = _s(a.get("improved_name", a.get("name", "Project")))
     desc = _s(a.get("improved_description", a.get("description", "")))
@@ -1502,7 +1786,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     faqs = _faq(category, name, a)
     steps = _steps(category)
     stats = _stats(category, a)
-    nav_items = _nav_items()
+    nav_items = _nav_items(category)
+    products = products or []
     meta_desc = subtitle
     meta_kw = SEO_KEYWORDS.get(category, "")
     brand_icon = t["icon"]
@@ -1641,6 +1926,9 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     </div>
   </section>
 
+  <!-- Promo (stores only) -->
+{_build_promo_html(category, products, t, ph_bg, ph_fg)}
+
   <!-- About -->
   <section id="about" class="section-alt">
     <div class="container">
@@ -1658,6 +1946,9 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
 {features_html}
     </div>
   </section>
+
+  <!-- Catalog (stores only) -->
+{_build_catalog_html(category, products, t, ph_bg, ph_fg)}
 
   <!-- Killer Feature -->
   <section id="killer" class="killer">
@@ -1764,6 +2055,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     </div>
   </div>
 
+{_build_cart_modal_html(category)}
+
   <script>
 {js_content}
   </script>
@@ -1782,6 +2075,7 @@ def generate_premium_site(
     analysis: dict | None = None,
     category: str = "companies",
     site_analysis: dict | None = None,
+    products: list | None = None,
 ) -> tuple[str, str, str]:
     """Generate a premium website with category-specific design.
     Returns (html, css, js) where CSS and JS are empty (inlined in HTML)."""
@@ -1802,6 +2096,6 @@ def generate_premium_site(
     css = _generate_css(t, category)
     js = _generate_js(t, category)
     html = _generate_html(t, category, a, site_analysis or {},
-                         css_content=css, js_content=js)
+                         css_content=css, js_content=js, products=products or [])
 
     return html, "", ""

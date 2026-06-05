@@ -921,6 +921,161 @@ async def analyze_original_site(url: str) -> dict:
         return {}
 
 
+async def parse_store_products(url: str) -> list[dict]:
+    """Scrape product data (name, image, price) from an online store.
+
+    Tries multiple strategies: Shopify, WooCommerce, generic product pages.
+    Returns a list of dicts: [{"name": "...", "image": "https://...", "price": "..."}, ...]
+    """
+    if not url:
+        return []
+    try:
+        from bs4 import BeautifulSoup
+
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml",
+            })
+            if resp.status_code != 200:
+                logger.info(f"[ParseProducts] HTTP {resp.status_code} for {url}")
+                return []
+
+            soup = BeautifulSoup(resp.text[:200000], "lxml")
+            products: list[dict] = []
+
+            # ── Strategy 1: Look for common product card patterns ──
+            selectors = [
+                "div.product-card", "div.product-item", "div.product",
+                "li.product", "article.product", "div.product-card__wrapper",
+                "div[class*='product-card']", "div[class*='productCard']",
+                "div[class*='product_item']", "div[class*='grid-item']",
+                "a[class*='product']", "div[class*='card-product']",
+                "div[class*='item-card']", "div[class*='collection-item']",
+            ]
+
+            cards = []
+            for sel in selectors:
+                cards = soup.select(sel)
+                if len(cards) >= 2:
+                    break
+
+            # ── Strategy 2: Look for product links to product pages ──
+            if len(cards) < 2:
+                for a_tag in soup.select("a[href]"):
+                    href = a_tag.get("href", "")
+                    if "/products/" in href or "/product/" in href:
+                        parent = a_tag.parent
+                        if parent:
+                            cards.append(parent)
+                cards = cards[:24]
+
+            # ── Strategy 3: Find containers with both img and price-like text ──
+            if len(cards) < 2:
+                price_patterns = [
+                    lambda t: t.name == "span" and any(
+                        s in t.get_text() for s in ["€", "$", "£", "₽", "USD", "EUR", "руб"]
+                    ),
+                    lambda t: t.name == "span" and bool(re.search(r"\d+[.,]\d{2}", t.get_text())),
+                ]
+                for pp in price_patterns:
+                    price_els = soup.find_all(pp)
+                    if len(price_els) >= 2:
+                        for pel in price_els:
+                            card = pel.parent
+                            while card and card.name != "body":
+                                if card.find("img"):
+                                    cards.append(card)
+                                    break
+                                card = card.parent
+                        cards = list({id(c) for c in cards}.__class__(
+                            {id(c): c for c in cards}
+                        ).values())
+                        if len(cards) >= 2:
+                            break
+
+            # ── Extract data from found cards ──
+            for card in cards[:24]:
+                try:
+                    img_tag = card.find("img")
+                    if not img_tag:
+                        continue
+                    img_src = img_tag.get("src") or img_tag.get("data-src") or img_tag.get("data-lazy-src") or ""
+                    if not img_src:
+                        srcset = img_tag.get("data-srcset") or img_tag.get("srcset") or ""
+                        if srcset:
+                            first_src = srcset.split(",")[0].strip().split()[0]
+                            if first_src:
+                                img_src = first_src
+                    if not img_src or "data:" in img_src:
+                        continue
+                    # Make absolute URL
+                    if img_src.startswith("//"):
+                        img_src = "https:" + img_src
+                    elif img_src.startswith("/"):
+                        parsed = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url)
+                        img_src = f"{parsed.scheme}://{parsed.netloc}{img_src}"
+
+                    # Product name
+                    name = ""
+                    h_tag = card.find(["h3", "h2", "h4", "h5"])
+                    if h_tag:
+                        name = h_tag.get_text(strip=True)
+                    if not name:
+                        title_tag = card.find(["p", "span"], class_=re.compile(r"title|name|product-name", re.I))
+                        if title_tag:
+                            name = title_tag.get_text(strip=True)
+                    if not name:
+                        a_tag = card.find("a")
+                        if a_tag:
+                            name = a_tag.get("title", "") or a_tag.get("aria-label", "") or a_tag.get_text(strip=True)
+
+                    # Price
+                    price = ""
+                    price_tag = card.find(string=re.compile(r"[€$£₽]?\s*\d+[.,]\d{2}"))
+                    if price_tag:
+                        price = price_tag.strip()
+                    if not price:
+                        for cls_pattern in ["price", "amount", "cost", "product-price", "money"]:
+                            pt = card.find(class_=re.compile(cls_pattern, re.I))
+                            if pt:
+                                price = pt.get_text(strip=True)
+                                break
+
+                    if name and img_src:
+                        products.append({
+                            "name": name[:120],
+                            "image": img_src[:500],
+                            "price": price[:60] if price else "",
+                        })
+                except Exception:
+                    continue
+
+            # Deduplicate by image URL
+            seen_images: set[str] = set()
+            unique: list[dict] = []
+            for p in products:
+                if p["image"] not in seen_images:
+                    seen_images.add(p["image"])
+                    unique.append(p)
+
+            logger.info(
+                f"[ParseProducts] Found {len(unique)} products from {url}"
+            )
+            return unique
+
+    except ImportError:
+        logger.warning("[ParseProducts] BeautifulSoup not installed")
+        return []
+    except Exception as e:
+        logger.warning(f"[ParseProducts] Failed for {url}: {e}")
+        return []
+
+
 # ═══════════════════════════════════════════════════════════════════
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
@@ -3869,6 +4024,17 @@ async def callback_improve(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.warning(f"[Improve] Site analysis failed: {e}")
 
+    # ─── Step 2b: Parse products for stores ───
+    store_products: list[dict] = []
+    if category == "stores" and link:
+        try:
+            store_products = await parse_store_products(link)
+            logger.info(
+                f"[Improve] Parsed {len(store_products)} products from {link}"
+            )
+        except Exception as e:
+            logger.warning(f"[Improve] Product parsing failed: {e}")
+
     # ─── Step 3: Update status ───
     try:
         await status_msg.edit_text(
@@ -3936,6 +4102,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
         analysis=analysis,
         category=category,
         site_analysis=site_analysis,
+        products=store_products,
     )
     logger.info(
         f"[Improve] Premium site generated: HTML={len(html_content)}, "
