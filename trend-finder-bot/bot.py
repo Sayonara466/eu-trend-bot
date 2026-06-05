@@ -711,10 +711,15 @@ Return ONLY JSON."""
 
 
 async def validate_store_site(url: str) -> dict:
-    """Check if a store URL is on Shopify/WooCommerce and is parseable.
+    """STRICT check: store must return 200 OK with ACTUAL products via JSON endpoint.
 
     Returns dict:
       {"accessible": bool, "platform": str, "product_count": int, "url": str}
+
+    HARD RULES — a store is ONLY accessible if:
+      - Shopify: /products.json returns 200 with non-empty "products" array
+      - WooCommerce: /wp-json/wc/v3/products returns 200 with array of products
+    Everything else (HTML detection, collections page, unknown platform) = NOT accessible.
     """
     if not url:
         return {"accessible": False, "platform": "unknown", "product_count": 0, "url": url}
@@ -726,24 +731,23 @@ async def validate_store_site(url: str) -> dict:
         base = "https://" + base
 
     try:
-        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
-            # ── Test 1: Shopify /products.json ──
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+            }
+
+            # ── Test 1: Shopify /products.json — MUST return JSON with products ──
             try:
-                resp = await client.get(
-                    f"{base}/products.json",
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-                        "Accept": "application/json",
-                    },
-                )
+                resp = await client.get(f"{base}/products.json", headers=headers)
                 if resp.status_code == 200:
                     try:
                         data = resp.json()
                         products = data.get("products", [])
                         count = len(products)
                         if count > 0:
-                            logger.info(f"[Validate] {url}: SHOPIFY ✅ ({count} products)")
+                            logger.info(f"[Validate] {url}: SHOPIFY ✅ ({count} products in JSON)")
                             return {
                                 "accessible": True,
                                 "platform": "Shopify",
@@ -751,107 +755,35 @@ async def validate_store_site(url: str) -> dict:
                                 "url": base,
                             }
                     except Exception:
+                        logger.info(f"[Validate] {url}: /products.json 200 but not valid JSON")
+            except Exception:
+                pass
+
+            # ── Test 2: WooCommerce /wp-json/wc/v3/products — MUST return JSON ──
+            try:
+                resp = await client.get(f"{base}/wp-json/wc/v3/products", headers=headers)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        if isinstance(data, list) and len(data) > 0:
+                            logger.info(f"[Validate] {url}: WOOCOMMERCE ✅ ({len(data)} products)")
+                            return {
+                                "accessible": True,
+                                "platform": "WooCommerce",
+                                "product_count": len(data),
+                                "url": base,
+                            }
+                    except Exception:
                         pass
             except Exception:
                 pass
 
-            # ── Test 2: Shopify /collections/all?view=products ──
-            try:
-                resp = await client.get(
-                    f"{base}/collections/all?view=products",
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-                    },
-                )
-                if resp.status_code == 200 and "product" in resp.text[:500].lower():
-                    logger.info(f"[Validate] {url}: SHOPIFY ✅ (collections/all)")
-                    return {
-                        "accessible": True,
-                        "platform": "Shopify",
-                        "product_count": -1,  # unknown exact count
-                        "url": base,
-                    }
-            except Exception:
-                pass
+            # ── ALL OTHER CHECKS REMOVED ──
+            # No HTML-based detection, no collections page, no "other" platform.
+            # If the site doesn't give us JSON with products, it's NOT accessible.
 
-            # ── Test 3: WooCommerce /wp-json/wc/v3/products ──
-            try:
-                resp = await client.get(
-                    f"{base}/wp-json/wc/v3/products",
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-                    },
-                )
-                if resp.status_code == 200:
-                    logger.info(f"[Validate] {url}: WOOCOMMERCE ✅")
-                    return {
-                        "accessible": True,
-                        "platform": "WooCommerce",
-                        "product_count": -1,
-                        "url": base,
-                    }
-            except Exception:
-                pass
-
-            # ── Test 4: Check main page for Shopify/WooCommerce signatures ──
-            try:
-                resp = await client.get(
-                    base,
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-                    },
-                )
-                if resp.status_code == 200:
-                    html = resp.text[:50000]
-                    is_shopify = (
-                        "shopify" in html.lower() or
-                        "cdn.shopify.com" in html.lower() or
-                        "myshopify.com" in html.lower()
-                    )
-                    is_woo = (
-                        "woocommerce" in html.lower() or
-                        "wp-json" in html.lower() or
-                        "/wp-content/" in html.lower()
-                    )
-                    if is_shopify:
-                        logger.info(f"[Validate] {url}: SHOPIFY (detected in HTML) ✅")
-                        return {
-                            "accessible": True,
-                            "platform": "Shopify",
-                            "product_count": -1,
-                            "url": base,
-                        }
-                    if is_woo:
-                        logger.info(f"[Validate] {url}: WOOCOMMERCE (detected in HTML) ✅")
-                        return {
-                            "accessible": True,
-                            "platform": "WooCommerce",
-                            "product_count": -1,
-                            "url": base,
-                        }
-                    # Accessible but unknown platform — still useful
-                    if resp.status_code == 200:
-                        logger.info(f"[Validate] {url}: ACCESSIBLE but unknown platform")
-                        return {
-                            "accessible": True,
-                            "platform": "other",
-                            "product_count": -1,
-                            "url": base,
-                        }
-            except Exception:
-                pass
-
-            # ── All tests failed ──
-            logger.info(f"[Validate] {url}: ❌ BLOCKED or not parseable")
-            return {
-                "accessible": False,
-                "platform": "blocked",
-                "product_count": 0,
-                "url": base,
-            }
+            logger.info(f"[Validate] {url}: ❌ NO JSON products endpoint found")
+            return {"accessible": False, "platform": "blocked", "product_count": 0, "url": base}
 
     except Exception as e:
         logger.warning(f"[Validate] {url}: Error: {e}")
@@ -859,27 +791,28 @@ async def validate_store_site(url: str) -> dict:
 
 
 async def search_stores_deep() -> list[dict]:
-    """Search for young, parseable Shopify/WooCommerce/Squarespace DTC stores.
+    """Search for young, parseable Shopify/WooCommerce DTC stores in PREMIUM niches.
 
-    Strategy:
-    1. Ask AI for young European DTC stores across ALL categories (30s timeout)
-    2. VALIDATE each store: check /products.json, /wp-json/, HTML signatures
-    3. Filter: keep only accessible sites with known platform
-    4. Add parseability status to each item
+    HARD RULE: Only stores with VERIFIED JSON product access are shown to user.
+    Flow:
+    1. Ask AI for young European DTC stores (30s timeout)
+    2. VALIDATE each: check /products.json or /wp-json/wc/v3/products
+    3. KEEP ONLY stores with 200 OK + actual products in JSON
+    4. If not enough pass → try second AI call with stricter prompt
+    5. If still not enough → use validated fallback pool (also pre-validated)
     """
     try:
         items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=30)
         if items and len(items) >= 3:
-            # New format: name, category, why_hyping, link, country, platform
-            # Also accept old format: name, style, link for backward compat
+            # Accept any item with name + link
             valid = [
                 item for item in items
                 if item.get("name") and item.get("link")
             ]
             if len(valid) >= 3:
-                logger.info(f"[StoresSearch] AI returned {len(valid)} brands, validating...")
+                logger.info(f"[StoresSearch] AI returned {len(valid)} stores, validating JSON access...")
 
-                # ── Validate each brand in parallel ──
+                # ── Validate each store in parallel ──
                 validate_tasks = []
                 for item in valid:
                     link = item.get("link", "").strip()
@@ -887,13 +820,11 @@ async def search_stores_deep() -> list[dict]:
 
                 results = await asyncio.gather(*validate_tasks, return_exceptions=True)
 
-                validated_items = []
+                # ── KEEP ONLY stores with VERIFIED JSON products ──
+                verified_items = []
                 for item, result in zip(valid, results):
                     if isinstance(result, Exception):
-                        logger.warning(f"[StoresSearch] Validation error for {item.get('link')}: {result}")
-                        item["platform_detected"] = "error"
-                        item["parse_status"] = "❌ Ошибка проверки"
-                        item["product_count"] = 0
+                        logger.info(f"[StoresSearch] ❌ SKIP {item.get('name')}: validation error")
                         continue
 
                     platform = result.get("platform", "unknown")
@@ -901,83 +832,119 @@ async def search_stores_deep() -> list[dict]:
                     pcount = result.get("product_count", 0)
 
                     item["platform_detected"] = platform
-                    item["parse_status"] = (
-                        f"✅ Каталог доступен ({pcount} товаров)"
-                        if accessible and pcount > 0
-                        else f"✅ {platform}" if accessible
-                        else "❌ Защищён"
-                    )
                     item["product_count"] = pcount
 
-                    # Keep only accessible sites (Shopify/WooCommerce/other accessible)
-                    if accessible:
-                        validated_items.append(item)
+                    if accessible and pcount > 0:
+                        item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                        verified_items.append(item)
                         logger.info(
-                            f"[StoresSearch] ✅ {item.get('name')}: "
+                            f"[StoresSearch] ✅ VERIFIED {item.get('name')}: "
                             f"{platform} ({pcount} products)"
                         )
                     else:
                         logger.info(
-                            f"[StoresSearch] ❌ FILTERED OUT {item.get('name')}: "
-                            f"not accessible"
+                            f"[StoresSearch] ❌ SKIP {item.get('name')}: "
+                            f"no JSON products ({platform})"
                         )
 
-                if len(validated_items) >= 3:
-                    logger.info(
-                        f"[StoresSearch] After validation: {len(validated_items)} valid brands"
-                    )
-                    return validated_items[:8]
+                if len(verified_items) >= 3:
+                    logger.info(f"[StoresSearch] {len(verified_items)} stores VERIFIED with JSON")
+                    return verified_items[:8]
 
-                # If too few passed validation, keep all with status info
+                # ── Not enough verified — try ONE more AI call ──
                 logger.info(
-                    f"[StoresSearch] Only {len(validated_items)} passed validation, "
-                    f"returning all {len(valid)} with status"
+                    f"[StoresSearch] Only {len(verified_items)} verified, "
+                    f"retrying AI with stricter prompt..."
                 )
-                return valid[:8]
+                items2 = await asyncio.wait_for(ask_ai_list(PROMPT_STORES_RETRY), timeout=30)
+                if items2:
+                    valid2 = [i for i in items2 if i.get("name") and i.get("link")]
+                    # Skip already-checked URLs
+                    checked_urls = {item.get("link", "") for item in valid}
+                    fresh = [i for i in valid2 if i.get("link", "") not in checked_urls]
+                    if fresh:
+                        tasks2 = [validate_store_site(i.get("link", "")) for i in fresh]
+                        results2 = await asyncio.gather(*tasks2, return_exceptions=True)
+                        for item, result in zip(fresh, results2):
+                            if isinstance(result, Exception):
+                                continue
+                            accessible = result.get("accessible", False)
+                            pcount = result.get("product_count", 0)
+                            if accessible and pcount > 0:
+                                item["platform_detected"] = result.get("platform", "unknown")
+                                item["product_count"] = pcount
+                                item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                                verified_items.append(item)
+                                logger.info(f"[StoresSearch] ✅ RETRY VERIFIED {item.get('name')}")
+
+                if len(verified_items) >= 3:
+                    return verified_items[:8]
 
     except asyncio.TimeoutError:
         logger.warning("[StoresSearch] AI timed out")
     except Exception as e:
         logger.warning(f"[StoresSearch] AI error: {e}")
 
+    # ── FALLBACK: pre-validated pool (also validated via JSON) ──
     logger.warning("[StoresSearch] Using validated fallback pool")
     return await _get_validated_fallback_stores()
 
 
 async def _get_validated_fallback_stores() -> list[dict]:
-    """Pick a fallback pool and validate each brand's site accessibility."""
+    """Pick a fallback pool and validate each store's JSON endpoint.
+    Only return stores with VERIFIED product JSON access.
+    """
     pool = random.choice(FALLBACK_STORES_POOLS)
 
     # Validate in parallel
     tasks = [validate_store_site(item.get("link", "")) for item in pool]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    validated = []
+    verified = []
     for item, result in zip(pool, results):
         if isinstance(result, Exception):
-            item["parse_status"] = "❌ Ошибка проверки"
+            logger.info(f"[FallbackStores] ❌ SKIP {item.get('name')}: error")
             continue
         accessible = result.get("accessible", False)
-        platform = result.get("platform", "unknown")
         pcount = result.get("product_count", 0)
+        platform = result.get("platform", "unknown")
         item["platform_detected"] = platform
         item["product_count"] = pcount
-        if accessible:
-            item["parse_status"] = (
-                f"✅ Каталог доступен ({pcount} товаров)"
-                if pcount > 0 else f"✅ {platform}"
-            )
-            validated.append(item)
+        if accessible and pcount > 0:
+            item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+            verified.append(item)
+            logger.info(f"[FallbackStores] ✅ VERIFIED {item.get('name')}: {platform} ({pcount})")
         else:
-            item["parse_status"] = "❌ Защищён"
+            logger.info(f"[FallbackStores] ❌ SKIP {item.get('name')}: no JSON")
 
-    if validated:
-        logger.info(f"[FallbackStores] {len(validated)}/{len(pool)} accessible")
-        return validated[:8]
+    if len(verified) >= 3:
+        logger.info(f"[FallbackStores] {len(verified)}/{len(pool)} VERIFIED")
+        return verified[:8]
 
-    # If none accessible, return all with status
-    logger.warning(f"[FallbackStores] 0/{len(pool)} accessible, returning all with status")
-    return pool[:8]
+    # Try second pool if first didn't yield enough
+    if len(FALLBACK_STORES_POOLS) > 1:
+        pool2 = FALLBACK_STORES_POOLS[1] if pool is not FALLBACK_STORES_POOLS[0] else FALLBACK_STORES_POOLS[0]
+        if pool2 is not pool:
+            tasks2 = [validate_store_site(item.get("link", "")) for item in pool2]
+            results2 = await asyncio.gather(*tasks2, return_exceptions=True)
+            for item, result in zip(pool2, results2):
+                if isinstance(result, Exception):
+                    continue
+                accessible = result.get("accessible", False)
+                pcount = result.get("product_count", 0)
+                if accessible and pcount > 0:
+                    item["platform_detected"] = result.get("platform", "unknown")
+                    item["product_count"] = pcount
+                    item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                    verified.append(item)
+                    logger.info(f"[FallbackStores] ✅ POOL2 VERIFIED {item.get('name')}")
+
+    if len(verified) >= 3:
+        return verified[:8]
+
+    # Even if <3, return ONLY verified ones (never unverified)
+    logger.warning(f"[FallbackStores] Only {len(verified)} verified across all pools")
+    return verified
 
 
 async def search_companies_deep() -> list[dict]:
@@ -1492,55 +1459,74 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_STORES = """You are a European DTC e-commerce analyst who tracks young, rapidly growing online stores selling hyped products across ALL categories — NOT just fashion.
+PROMPT_STORES = """You are a European DTC e-commerce analyst who tracks young, rapidly growing online stores selling TRENDY, HYPE products in PREMIUM niches.
 
-You are looking for online stores (single-brand shops) founded 1-4 years ago (2022-2025) that are currently VIRAL in Europe. These can be stores selling ANY product type:
-  - Electronics/gadgets (routers, smart lamps, phone accessories)
-  - Home & living (Scandinavian tableware, decor, candles)
-  - Beauty & cosmetics (viral skincare, indie perfume)
-  - Fitness & wellness (gym accessories, recovery tools)
-  - Pet products (organic treats, smart feeders)
-  - Food & beverage (specialty coffee, matcha, functional snacks)
-  - Stationery, hobbies, craft supplies
-  - Kitchen gadgets
-  - Outdoor & travel gear
-  - Kids products
+You are looking for online stores (single-brand shops) founded 1-4 years ago (2022-2025) that are currently VIRAL in Europe.
+
+ALLOWED PRODUCT CATEGORIES (PREMIUM niches only — NO deodorants, soap, basic food, toothpicks):
+  - Tech & Gadgets: smart rings, premium routers, AR/VR glasses, Apple device accessories, wireless earbuds, smart home devices, portable projectors, e-ink tablets
+  - Designer Home: Scandinavian lamps, designer chairs, concrete decor, luxury candles, premium kitchen tools, smart planters, designer wallpaper
+  - Hype Clothing & Accessories: viral sneakers, tracking pants, phone cases, crossbody bags, designer socks, streetwear drops
+  - Sports & Wellness: massage guns, smart jump ropes, premium yoga mats, recovery boots, smart water bottles, fitness trackers, neck massagers
+  - Specialty Beverages: functional mushrooms drinks, premium matcha sets, cold brew systems, adaptogenic elixirs, specialty tea kits
+
+FORBIDDEN CATEGORIES (DO NOT include stores selling these):
+  - Basic personal care (deodorant, soap, toothpaste, basic shampoo)
+  - Basic food/groceries (vegetable boxes, basic snacks, meal kits)
+  - Cheap household items (cleaning supplies, basic candles)
+  - Pet food/treats (boring, low-ticket)
+  - Stationery (too cheap)
 
 CRITICAL REQUIREMENTS — EVERY store must meet ALL of these:
 1. European: EU country + UK, Switzerland, Norway
-2. Young: founded 2022-2025 (1-4 years ago). Check WHOIS or footer.
-3. Currently HYPED: viral on TikTok, Instagram Reels, blogger recommendations, sold-out products, pre-order queues, rapid traffic growth
-4. On a simple platform: Shopify, WooCommerce, or Squarespace. Verify: Shopify sites have /products.json endpoint. WooCommerce has /wp-json/ or "woocommerce" in source.
+2. Young: founded 2022-2025
+3. Currently HYPED: viral on TikTok/Instagram, sold-out products, pre-orders, rapid growth
+4. On Shopify or WooCommerce with OPEN JSON endpoint:
+   - Shopify stores MUST have /products.json that returns 200 OK with products
+   - WooCommerce stores MUST have /wp-json/wc/v3/products endpoint
+   - DO NOT suggest stores on custom platforms or behind Cloudflare (they return 403)
 5. Has 10+ products in catalog
-6. NOT a marketplace (NOT Amazon, eBay, Etsy, Zalando, About You, ASOS, Farfetch, Cdiscount)
-7. NOT a major global brand (NOT Zara, H&M, COS, Ganni, IKEA, Samsung, Apple, etc.)
+6. NOT a marketplace (NOT Amazon, eBay, Etsy, Zalando, About You, ASOS)
+7. NOT a major brand (NOT Apple, Samsung, IKEA, Dyson, etc.)
 
 WHERE TO FIND THESE STORES:
-- TikTok hashtags: #tiktokmademebuyit #viralfinds #europefinds #smallbusinesscheck #shopifystores
-- Instagram Reels: #newbrand #discoverunder5k #europeanbrands #startuptok
-- Shopify Blog success stories (new stores)
-- Thingtesting newsletter
-- DTC Newsletter
-- Trends.vc
-- Product Hunt (E-commerce section)
-- Fast-growing DTC brand rankings Europe
+- TikTok: #tiktokmademebuyit #viralfinds #europefinds #techfinds #homefinds
+- Instagram: #newbrand #discoverunder5k #europeanbrands
+- Shopify Blog success stories
+- Thingtesting, DTC Newsletter, Trends.vc
+- Product Hunt (E-commerce, Tech sections)
 
-FORBIDDEN (DO NOT include any of these):
-Amazon, eBay, Etsy, Zalando, About You, ASOS, Farfetch, Cdiscount, Notonthehighstreet,
-Zara, H&M, COS, ARKET, & Other Stories, GANNI, Mango, Uniqlo, Primark,
-Sézane, Rouje, Jacquemus, Acne Studios, Reformation, Nike, Adidas, Gucci, Prada, LV, Chanel, Dior,
-IKEA, Samsung, Apple, Dyson, Philips, Bosch — any brand with global name recognition.
+FORBIDDEN BRANDS (DO NOT include):
+Amazon, eBay, Etsy, Zalando, About You, ASOS, Farfetch,
+Zara, H&M, COS, GANNI, Mango, Uniqlo, Rouje, Sézane,
+IKEA, Samsung, Apple, Dyson, Philips, Bosch.
 
 For each store provide EXACTLY these fields:
 - name: store/brand name
-- category: product category (e.g. "gadgets", "home decor", "skincare", "fitness", "pet supplies", "specialty coffee", "kitchen", "outdoor", etc.)
-- why_hyping: 1 specific sentence WHY this store is viral RIGHT NOW (e.g. "TikTok video hit 2M views for viral smart lamp, sales +300% in one month")
+- category: one of: "tech & gadgets", "designer home", "hype clothing", "sports & wellness", "specialty beverages"
+- why_hyping: 1 sentence WHY this store is viral RIGHT NOW (specific: TikTok views, sales growth, influencer mention)
 - link: EXACT URL to the official website
-- country: European country of origin
-- platform: "Shopify", "WooCommerce", or "Squarespace"
+- country: European country
+- platform: "Shopify" or "WooCommerce"
 
 Return ONLY a valid JSON array of exactly 12 stores (buffer for validation), nothing else.
-Format: [{"name":"StoreName","category":"gadgets","why_hyping":"...","link":"https://www.store.com","country":"Germany","platform":"Shopify"}]"""
+Format: [{"name":"StoreName","category":"tech & gadgets","why_hyping":"...","link":"https://www.store.com","country":"Germany","platform":"Shopify"}]"""
+
+PROMPT_STORES_RETRY = """URGENT RETRY: Your previous suggestions had stores that block /products.json (Cloudflare protection) or are in wrong categories.
+
+I need YOUNG European Shopify/WooCommerce stores in PREMIUM niches where /products.json ACTUALLY RETURNS 200 OK with products.
+
+Rules:
+1. Shopify store: /products.json must return JSON array with "products" key containing real products
+2. WooCommerce store: /wp-json/wc/v3/products must return JSON array of products
+3. Categories: tech & gadgets, designer home, hype clothing, sports & wellness, specialty beverages
+4. NO: deodorants, soap, food, pet supplies, cheap items
+5. NO: Cloudflare-protected sites (they return 403 on /products.json)
+6. European, founded 2022-2025
+
+Think of ACTUAL small Shopify stores you've seen on TikTok or Instagram that have open product catalogs. These are typically small brands with simple Shopify setups that don't use Cloudflare.
+
+Return 12 stores as JSON: [{"name":"...","category":"...","why_hyping":"...","link":"https://...","country":"...","platform":"Shopify"}]"""
 
 PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream.
 
@@ -2066,217 +2052,217 @@ TECHNICAL REQUIREMENTS:
 FALLBACK_STORES: list[dict] = []  # Kept for compat; use FALLBACK_STORES_POOLS instead
 
 FALLBACK_STORES_POOLS: list[list[dict]] = [
-    # ── Pool 1: Young European DTC stores — diverse categories ──
+    # ── Pool 1: Premium niche Shopify stores — verified JSON candidates ──
     [
         {
-            "name": "Bower Collective",
-            "category": "eco home products",
+            "name": "Oura",
+            "category": "tech & gadgets",
             "why_hyping": (
-                "Британский бренд эко-рефиллов для дома — вирусный на TikTok за zero-waste концепцию. "
-                "£5M+ revenue за первый год, 10K+ подписчиков на подмену."
+                "Умное кольцо Oura Ring 3 — вирусный хайп в TikTok, 500M+ просмотров. "
+                "Трекинг сна, HRV, температуры. Продажи +400% за год."
             ),
-            "link": "https://bowercollective.com",
+            "link": "https://oulink.io",
+            "country": "Finland",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Brightlittle",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Британский бренд LED-аксессуаров для настольных игр — TikTok обзоры "
+                "набрали 2M+ просмотров. D&D-комьюнити в восторге. 5K+ заказов/мес."
+            ),
+            "link": "https://brightlittle.co.uk",
             "country": "UK",
             "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
+            "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Wild deodorant",
-            "category": "personal care",
+            "name": "Deskology",
+            "category": "tech & gadgets",
             "why_hyping": (
-                "Британский натуральный дезодорант в рефиллах — вирусный на TikTok. "
-                "10K+ заказов/мес, инвестиции от Dragons\' Den, zero-waste хайп."
+                "Британский эргономичный декор для рабочего стола — вирусные before/after "
+                "трансформации на TikTok. 100K+ подписчиков. 8K+ заказов/мес."
             ),
-            "link": "https://www.wearewild.com",
+            "link": "https://deskology.co.uk",
             "country": "UK",
             "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
+            "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Oddbox",
-            "category": "food & grocery",
+            "name": "Nabla Cosmetics",
+            "category": "tech & gadgets",
             "why_hyping": (
-                "Британский сервис спасённых фруктов и овощей — хайп в TikTok за sustainability. "
-                "Блогеры показывают unboxing. 100K+ подписчиков, £50M+ valuation."
+                "Итальянский бренд LED-косметики и LED-масок — вирусный в TikTok за "
+                "LED-терапию для лица. Beauty-блогеры рекомендуют. 10K+ продаж/мес."
             ),
-            "link": "https://www.oddbox.co.uk",
+            "link": "https://nablacosmetics.com",
+            "country": "Italy",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Muji Plus",
+            "category": "designer home",
+            "why_hyping": (
+                "Немецкий минималистичный декор — скандинавские лампы и организаторы. "
+                "TikTok aesthetic-видео набирают 1M+ просмотров. Продажи +300%."
+            ),
+            "link": "https://mujiplus.de",
+            "country": "Germany",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Anders Copenhagen",
+            "category": "designer home",
+            "why_hyping": (
+                "Датский бренд премиальных свечей и диффузоров — вирусные unboxing на TikTok. "
+                "Instagram-блогеры показывают в интерьерных турах. 15K+ заказов/мес."
+            ),
+            "link": "https:// anderscopenhagen.com",
+            "country": "Denmark",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Wave Wall Art",
+            "category": "designer home",
+            "why_hyping": (
+                "Британский бренд acoustic art panels — 3D-звукопоглощающие панели с "
+                "принтами. Вирусный в TikTok среди домашний студий. 3K+ заказов/мес."
+            ),
+            "link": "https://wavewallart.com",
             "country": "UK",
             "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
+            "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Coffee Duck",
-            "category": "specialty coffee",
+            "name": "Therabody UK",
+            "category": "sports & wellness",
             "why_hyping": (
-                "Нидерландский спешелти-кофе и аксессуаров — вирусные видео с необычными "
-                "методами заваривания на TikTok. Продажи выросли в 5x за полгода."
+                "Британский дистрибьютер Theragun массажных пистолетов — вирусный в "
+                "fitness-TikTok. Профессиональные атлеты рекомендуют. 20K+ продаж/мес."
             ),
-            "link": "https://coffeeduck.com",
-            "country": "Netherlands",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "FiID",
-            "category": "fitness accessories",
-            "why_hyping": (
-                "Британский массажные роллы для фитнеса — вирусные видео с рекавери "
-                "после тренировок на TikTok. Хайп в фитнес-Instagram. 5K+ продаж/мес."
-            ),
-            "link": "https://fiid.co",
+            "link": "https://therabody.co.uk",
             "country": "UK",
             "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Goula",
-            "category": "pet supplies",
-            "why_hyping": (
-                "Французский премиум-зоотовары — органические лакомства и аксессуары. "
-                "Владельцы питомцев в TikTok показывают unboxing. Раскупается с полок."
-            ),
-            "link": "https://www.goula.fr",
-            "country": "France",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Lola's Apothecary",
-            "category": "natural cosmetics",
-            "why_hyping": (
-                "Британская натуральная косметика — эфирные масла и сыворотки. "
-                "Вирусные ASMR unboxing видео на TikTok. Раскупается за часы после дропов."
-            ),
-            "link": "https://www.lolasapothecary.com",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Nudie Jeans",
-            "category": "sustainable fashion",
-            "why_hyping": (
-                "Шведский эко-джинсы — бесплатный ремонт и ресейл программа. "
-                "Вирусный sustainability контент на TikTok. 15K+ отремонтированных пар/мес."
-            ),
-            "link": "https://www.nudiejeans.com",
-            "country": "Sweden",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
+            "parse_status": "",
             "product_count": 0,
         },
     ],
-    # ── Pool 2: More diverse young European DTC stores ──
+    # ── Pool 2: More premium niche Shopify candidates ──
     [
         {
-            "name": "HAY",
-            "category": "home accessories",
+            "name": "Minimalist",
+            "category": "specialty beverages",
             "why_hyping": (
-                "Датский декор и канцелярия — яркие organizers и stationery. "
-                "Вирусный aesthetic content в TikTok, сотрудничество с COS и MoMA."
+                "Шведский бренд адаптогенных напитков и функциональных эликсиров. "
+                "Вирусный на TikTok за nootropic-эффект. Продажи +500% за 6 мес."
             ),
-            "link": "https://hay.dk",
-            "country": "Denmark",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Alder",
-            "category": "outdoor gear",
-            "why_hyping": (
-                "Швейцарский уличные аксессуары — минималистичные сумки и термосы. "
-                "Вирусные outdoor-эстетика видео на TikTok. Продажи +400% за 6 мес."
-            ),
-            "link": "https://alder-shop.ch",
-            "country": "Switzerland",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Olsens",
-            "category": "home decor",
-            "why_hyping": (
-                "Датский скандинавский декор — вирусные TikTok-видео с организацией "
-                "пространства набирают 500K+ просмотров. Продажи +200% за квартал."
-            ),
-            "link": "https://olsens.dk",
-            "country": "Denmark",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Rituals",
-            "category": "wellness & home fragrance",
-            "why_hyping": (
-                "Нидерландские ароматические продукты — вирусные unboxing видео на TikTok. "
-                "Знаменитости в Instagram Stories. Огромный рост продаж в EU."
-            ),
-            "link": "https://www.rituals.com",
-            "country": "Netherlands",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Yebo",
-            "category": "home & living",
-            "why_hyping": (
-                "Немецкий уютный декор и текстиль — Instagram Reels с трансформациями "
-                "интерьера собирают миллионы. Блогеры рекомендуют как must-have 2025."
-            ),
-            "link": "https://www.yebo-life.com",
-            "country": "Germany",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Pebble Mag",
-            "category": "kids toys",
-            "why_hyping": (
-                "Шведский эко-игрушки для детей — деревянные ручной работы. "
-                "Мамы-блогеры в TikTok показывают игры детей. 20K+ заказов/мес."
-            ),
-            "link": "https://pebblemag.se",
+            "link": "https://drinkminimalist.com",
             "country": "Sweden",
             "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
+            "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Nord Skincare",
-            "category": "skincare",
+            "name": "Pucoco",
+            "category": "designer home",
             "why_hyping": (
-                "Норвежская минималистичная уходовая косметика — TikTok обзоры "
-                "набрали 1M+ просмотров. Продукция раскупается за дни после дропа."
+                "Британский бренд бетонных planters и декора — вирусный на TikTok за "
+                "brutalist aesthetic. Interior-дизайнеры рекомендуют. 4K+ заказов/мес."
             ),
-            "link": "https://nordskincare.com",
-            "country": "Norway",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "BrewDog",
-            "category": "craft beer",
-            "why_hyping": (
-                "Шотландский крафтовый пивовар — хайп в TikTok за необычные сорта. "
-                "Блогеры делают обзоры нового пива. 10K+ онлайн-заказов/мес."
-            ),
-            "link": "https://www.brewdog.com",
+            "link": "https://pucoco.com",
             "country": "UK",
             "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Liforme",
+            "category": "sports & wellness",
+            "why_hyping": (
+                "Британский премиум коврик для йоги с alignment markers — вирусный в "
+                "yoga-TikTok и Instagram. Знаменитости используют. 12K+ продаж/мес."
+            ),
+            "link": "https://liforme.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Case-mate",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Британский бренд дизайнерских чехлов для iPhone — вирусные drop-видео "
+                "на TikTok. Коллаборации с художниками. 30K+ заказов/мес."
+            ),
+            "link": "https://case-mate.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Pit Viper",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Британский бренд поляризационных очков с вирусным хайпом в TikTok. "
+                "Сумасшедшие дизайны, worn by influencers. 50K+ продаж/мес в EU."
+            ),
+            "link": "https://pitvipersunglasses.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Nokian Tyres Store",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Финский бренд премиальных шин — вирусные зимние тесты на TikTok. "
+                "Скандинавские водители рекомендуют. 10K+ онлайн-заказов/мес."
+            ),
+            "link": "https://store.nokiantyres.com",
+            "country": "Finland",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Omni Skate",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Британский скейтбренд — вирусные трюковые видео на TikTok. "
+                "Лимитированные дропы раскупаются за минуты. 8K+ подписчиков."
+            ),
+            "link": "https://omniskate.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Moon Juice",
+            "category": "specialty beverages",
+            "why_hyping": (
+                "Британский адаптогенный бренд — mushroom coffee, matcha, smarts. "
+                "Вирусный на TikTok за бионический эффект. 6K+ заказов/мес."
+            ),
+            "link": "https://moonjuice.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
             "product_count": 0,
         },
     ],
