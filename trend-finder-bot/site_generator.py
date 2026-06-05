@@ -1414,8 +1414,8 @@ section {{ padding: 100px 0; }}
   background: {bg};
 }}
 .catalog-grid {{
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 28px; max-width: 1200px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 20px; max-width: 1200px; margin: 0 auto;
 }}
 .product-card {{
   background: {card};
@@ -1430,34 +1430,35 @@ section {{ padding: 100px 0; }}
   box-shadow: {t["card_shadow_hover"]};
 }}
 .product-card-img {{
-  position: relative; overflow: hidden;
+  position: relative;
   background: {bg_alt};
+  display: flex; align-items: center; justify-content: center;
 }}
 .product-card-img img {{
-  width: 100%; height: 280px; object-fit: cover;
+  width: 100%; height: auto; max-height: 320px; object-fit: contain;
   display: block; transition: transform 0.5s ease;
 }}
 .product-card:hover .product-card-img img {{
-  transform: scale(1.05);
+  transform: scale(1.03);
 }}
 .product-card-body {{
-  padding: 20px; flex: 1;
+  padding: 14px 16px; flex: 1;
   display: flex; flex-direction: column;
 }}
 .product-card-name {{
-  font-family: {hf}; font-size: 1rem; font-weight: 600;
-  color: {tp}; margin-bottom: 8px; line-height: 1.4;
+  font-family: {hf}; font-size: 0.9rem; font-weight: 600;
+  color: {tp}; margin-bottom: 6px; line-height: 1.3;
   display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden;
 }}
 .product-card-price {{
-  font-size: 1.15rem; font-weight: 600;
-  color: {tp}; margin-top: auto; margin-bottom: 16px;
+  font-size: 1rem; font-weight: 600;
+  color: {tp}; margin-top: auto; margin-bottom: 12px;
 }}
 .btn-cart {{
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  width: 100%; padding: 12px 20px; border-radius: 4px;
-  font-weight: 500; font-size: 0.85rem; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 10px 16px; border-radius: 4px;
+  font-weight: 500; font-size: 0.8rem; cursor: pointer;
   border: 1.5px solid {tp}; background: transparent;
   color: {tp}; transition: all 0.3s ease;
   font-family: {bf}; letter-spacing: 0.5px; text-transform: uppercase;
@@ -1495,9 +1496,13 @@ section {{ padding: 100px 0; }}
   .catalog-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 768px) {
-  .catalog-grid { grid-template-columns: 1fr; }
+  .catalog-grid { grid-template-columns: repeat(2, 1fr); }
   .promo-image img { min-height: 240px; }
-  .product-card-img img { height: 220px; }
+  .product-card-img img { max-height: 260px; }
+}
+@media (max-width: 480px) {
+  .catalog-grid { grid-template-columns: 1fr; }
+  .product-card-img img { max-height: 280px; }
 }"""
 
     return (base + typo + btn + nav + hero + sections + about + features
