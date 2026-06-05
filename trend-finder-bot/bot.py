@@ -1490,37 +1490,55 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_STORES = """You are a DTC fashion analyst who tracks young Shopify/WooCommerce brands going viral on TikTok and Instagram.
+PROMPT_STORES = """You are a European DTC e-commerce analyst who tracks young, rapidly growing online stores selling hyped products across ALL categories — NOT just fashion.
 
-CRITICAL REQUIREMENTS — EVERY brand must meet ALL of these:
-1. Website built on Shopify or WooCommerce (check: the URL should end in .myshopify.com OR the site should have /products.json endpoint OR /wp-json/ endpoint)
-2. Brand founded LESS than 3 years ago (2022-2025)
-3. Going VIRAL on TikTok or Instagram right now
-4. NOT mainstream yet — niche/indie but rapidly growing
-5. Has an active online store with real products
+You are looking for online stores (single-brand shops) founded 1-4 years ago (2022-2025) that are currently VIRAL in Europe. These can be stores selling ANY product type:
+  - Electronics/gadgets (routers, smart lamps, phone accessories)
+  - Home & living (Scandinavian tableware, decor, candles)
+  - Beauty & cosmetics (viral skincare, indie perfume)
+  - Fitness & wellness (gym accessories, recovery tools)
+  - Pet products (organic treats, smart feeders)
+  - Food & beverage (specialty coffee, matcha, functional snacks)
+  - Stationery, hobbies, craft supplies
+  - Kitchen gadgets
+  - Outdoor & travel gear
+  - Kids products
 
-WHERE TO FIND THESE BRANDDS:
-- Shopify Store examples: search for young DTC fashion brands on Shopify
-- TikTok Creative Center trending fashion brands
-- Instagram fashion influencers promoting new indie brands
-- Product Hunt / Betalist fashion DTC launches
-- Look for brands like: Helsa, Live The Process, BITE Studios, House of Sunny, Rat & Boa, With Nothing Underneath, Les Girls Les Boys, Sleeper, Diotima, Nagnata
+CRITICAL REQUIREMENTS — EVERY store must meet ALL of these:
+1. European: EU country + UK, Switzerland, Norway
+2. Young: founded 2022-2025 (1-4 years ago). Check WHOIS or footer.
+3. Currently HYPED: viral on TikTok, Instagram Reels, blogger recommendations, sold-out products, pre-order queues, rapid traffic growth
+4. On a simple platform: Shopify, WooCommerce, or Squarespace. Verify: Shopify sites have /products.json endpoint. WooCommerce has /wp-json/ or "woocommerce" in source.
+5. Has 10+ products in catalog
+6. NOT a marketplace (NOT Amazon, eBay, Etsy, Zalando, About You, ASOS, Farfetch, Cdiscount)
+7. NOT a major global brand (NOT Zara, H&M, COS, Ganni, IKEA, Samsung, Apple, etc.)
 
-STRICTLY FORBIDDEN (sites with Cloudflare protection or custom CMS, DO NOT include):
-Zara, H&M, COS, ARKET, & Other Stories, GANNI, Massimo Dutti, Mango, Uniqlo, Primark,
-Sézane, Rouje, Jacquemus, Coperni, Acne Studios, Reformation, Farm Rio, Alaia, By Far, Veja,
-Nanushka, Totême, Lemaire, Sandro, Maje, A.P.C., Samsoe, Gestuz, Cult Gaia, Rotate,
-Nike, Adidas, Gucci, Prada, LV, Chanel, Dior, Ralph Lauren, Calvin Klein, Tommy Hilfiger.
+WHERE TO FIND THESE STORES:
+- TikTok hashtags: #tiktokmademebuyit #viralfinds #europefinds #smallbusinesscheck #shopifystores
+- Instagram Reels: #newbrand #discoverunder5k #europeanbrands #startuptok
+- Shopify Blog success stories (new stores)
+- Thingtesting newsletter
+- DTC Newsletter
+- Trends.vc
+- Product Hunt (E-commerce section)
+- Fast-growing DTC brand rankings Europe
 
-For each brand provide EXACTLY these fields:
-- name: brand name
-- style: 1-2 sentences about WHY this brand is viral RIGHT NOW (TikTok trend, influencer hype, specific viral product)
+FORBIDDEN (DO NOT include any of these):
+Amazon, eBay, Etsy, Zalando, About You, ASOS, Farfetch, Cdiscount, Notonthehighstreet,
+Zara, H&M, COS, ARKET, & Other Stories, GANNI, Mango, Uniqlo, Primark,
+Sézane, Rouje, Jacquemus, Acne Studios, Reformation, Nike, Adidas, Gucci, Prada, LV, Chanel, Dior,
+IKEA, Samsung, Apple, Dyson, Philips, Bosch — any brand with global name recognition.
+
+For each store provide EXACTLY these fields:
+- name: store/brand name
+- category: product category (e.g. "gadgets", "home decor", "skincare", "fitness", "pet supplies", "specialty coffee", "kitchen", "outdoor", etc.)
+- why_hyping: 1 specific sentence WHY this store is viral RIGHT NOW (e.g. "TikTok video hit 2M views for viral smart lamp, sales +300% in one month")
 - link: EXACT URL to the official website
-- country: country of origin
-- platform: "Shopify" or "WooCommerce" (you must be confident about this)
+- country: European country of origin
+- platform: "Shopify", "WooCommerce", or "Squarespace"
 
-Return ONLY a valid JSON array of exactly 10 brands (to have buffer for validation), nothing else.
-Format: [{"name":"BrandName","style":"...","link":"https://www.brand.com","country":"Country","platform":"Shopify"}]"""
+Return ONLY a valid JSON array of exactly 12 stores (buffer for validation), nothing else.
+Format: [{"name":"StoreName","category":"gadgets","why_hyping":"...","link":"https://www.store.com","country":"Germany","platform":"Shopify"}]"""
 
 PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream.
 
@@ -3904,24 +3922,33 @@ def build_item_message(item: dict, emoji: str, category: str = "") -> str:
             text += f"\n🔗 [Официальный сайт]({link})"
         return text
 
-    # Standard format for stores/companies
+    # Stores format — new DTC store layout with category, country, hype reason
+    if category == "stores":
+        cat = item.get("category", item.get("style", ""))
+        why_hyping = item.get("why_hyping", item.get("description", item.get("style", "")))
+        country = item.get("country", "")
+        parse_status = item.get("parse_status", "")
+
+        text = f"{emoji} *{name}*\n"
+        if cat:
+            text += f"📦 *Категория:* {cat}\n"
+        if country:
+            text += f"🌍 *Страна:* {country}\n"
+        if why_hyping:
+            text += f"🚀 *Почему хайпует:* {why_hyping}\n"
+        if parse_status:
+            text += f"✅ *Парсинг:* {parse_status}\n"
+        if link:
+            text += f"\n🔗 [Сайт магазина]({link})"
+        return text
+
+    # Standard format for companies
     desc = item.get("description", item.get("style", ""))
     extra = item.get("country", "") or item.get("sector", "")
 
     text = f"{emoji} *{name}*\n\n"
     if desc:
         text += f"{desc}\n\n"
-    # For stores: show platform + parse status
-    if category == "stores":
-        platform = item.get("platform_detected", "")
-        parse_status = item.get("parse_status", "")
-        if platform and parse_status:
-            text += f"🛒 {parse_status}"
-            if platform not in parse_status:
-                text += f" · {platform}"
-            text += "\n"
-        elif parse_status:
-            text += f"🛒 {parse_status}\n"
     if extra:
         text += f"📍 {extra}\n"
     if link:
