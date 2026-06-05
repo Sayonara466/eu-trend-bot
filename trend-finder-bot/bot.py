@@ -1221,80 +1221,23 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
                     seen.add(p["image"])
                     unique.append(p)
 
-            logger.info(f"[ParseProducts] Scraped {len(unique)} products from {url}")
+            # Mark every product with source URL for verification
+            for p in unique:
+                p["source_url"] = url
 
-            # ── Strategy F: AI-generated products based on store data ──
-            if len(unique) < 3 and (desc or name):
-                logger.info(f"[ParseProducts] Scraping insufficient, generating with AI")
-                ai_products = await _generate_ai_products(name, desc, url)
-                if ai_products:
-                    # Add AI products, dedup against scraped ones
-                    existing = {p["image"] for p in unique}
-                    for p in ai_products:
-                        if p["image"] not in existing:
-                            unique.append(p)
-                    logger.info(f"[ParseProducts] AI added {len(ai_products)}, total {len(unique)}")
+            logger.info(
+                f"[ParseProducts] Scraped {len(unique)} products STRICTLY from {url}"
+            )
 
-            return unique[:24]
+            # NO AI fallback — return only real parsed products
+            # If empty, the caller handles it
+            return unique[:60]
 
     except ImportError:
         logger.warning("[ParseProducts] BeautifulSoup not installed")
         return []
     except Exception as e:
         logger.warning(f"[ParseProducts] Failed for {url}: {e}")
-        return []
-
-
-async def _generate_ai_products(store_name: str, desc: str, url: str) -> list[dict]:
-    """Use AI to generate realistic product data based on the store's brand/style.
-
-    This is NOT fake data — it's AI analysis of the store's niche, style,
-    and target audience to create representative product listings.
-    """
-    if not desc and not store_name:
-        return []
-    prompt = f"""Based on this fashion store, generate 8 realistic products for their website.
-
-Store: {store_name}
-Description: {desc[:500]}
-Website: {url}
-
-Generate 8 products that this store would realistically sell. Each product must have:
-1. A realistic product name (specific, like "Oversized Merino Wool Blazer" not just "Blazer")
-2. A price in EUR (€) — realistic for this brand's price range
-3. A specific Unsplash search query for the product image (e.g. "minimalist black wool blazer fashion")
-
-Return ONLY a valid JSON array. No explanation.
-Format: [{{"name": "Product Name", "price": "€149.00", "image_query": "search query for unsplash image"}}]
-
-The products should match the store's actual style (minimalist, streetwear, luxury, sustainable, etc.)."""
-    try:
-        result = await ask_openrouter(prompt, "")
-        if not result:
-            return []
-        # Extract JSON from response
-        json_match = re.search(r"\[.*\]", result, re.DOTALL)
-        if not json_match:
-            return []
-        import json as _json
-        items = _json.loads(json_match.group())
-        products = []
-        for item in items[:12]:
-            pname = item.get("name", "Product")
-            price = item.get("price", "")
-            query = item.get("image_query", "") or item.get("image", "")
-            # Use picsum.photos as placeholder (real images from unsplash-style CDN)
-            import hashlib
-            seed = hashlib.md5(pname.encode()).hexdigest()[:8]
-            img_url = f"https://picsum.photos/seed/{seed}/400/500"
-            products.append({
-                "name": pname[:120],
-                "image": img_url,
-                "price": str(price)[:60],
-            })
-        return products
-    except Exception as e:
-        logger.warning(f"[AIProducts] Failed: {e}")
         return []
 
 
@@ -4246,27 +4189,58 @@ async def callback_improve(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.warning(f"[Improve] Site analysis failed: {e}")
 
-    # ─── Step 2b: Parse products for stores ───
+    # ─── Step 2b: Parse products for stores — STRICT URL binding ───
+    current_shop_url = link  # ← жёсткая привязка к магазину
     store_products: list[dict] = []
-    if category == "stores" and link:
+    if category == "stores" and current_shop_url:
         try:
-            store_products = await parse_store_products(link, desc=desc, name=name)
-            logger.info(
-                f"[Improve] Parsed {len(store_products)} products from {link}"
+            store_products = await parse_store_products(
+                current_shop_url, desc=desc, name=name
             )
+            # Verify: every product must have source_url == current_shop_url
+            verified = [
+                p for p in store_products
+                if p.get("source_url") == current_shop_url
+            ]
+            logger.info(
+                f"[Improve] PARSE RESULT: "
+                f"source={current_shop_url} | "
+                f"scraped={len(store_products)} | "
+                f"verified={len(verified)}"
+            )
+            store_products = verified
         except Exception as e:
             logger.warning(f"[Improve] Product parsing failed: {e}")
 
-    # ─── Step 3: Update status ───
-    try:
-        await status_msg.edit_text(
-            f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
-            f"{'✅' if site_analysis else '⏭️'} Шаг 1/4: "
-            f"{'Анализ сайта — готов' if site_analysis else 'Анализ сайта — пропущен'}\n"
-            f"⏳ Шаг 2/4: AI-анализ концепции + GEO + ключевые слова..."
-        )
-    except Exception:
-        pass
+    # ─── Step 2c: Report product parsing status to user ───
+    if category == "stores":
+        if len(store_products) == 0:
+            await status_msg.edit_text(
+                f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
+                f"⚠️ Не удалось спарсить каталог {name}\n"
+                f"Источник: {current_shop_url}\n\n"
+                f"Сайт генерируется без товаров.\n"
+                f"⏳ Шаг 2/4: AI-анализ концепции + GEO..."
+            )
+        else:
+            await status_msg.edit_text(
+                f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
+                f"✅ Шаг 1/4: Анализ сайта\n"
+                f"🛍 Спаршено товаров: *{len(store_products)}*\n"
+                f"   Источник: {current_shop_url}\n"
+                f"⏳ Шаг 2/4: AI-анализ концепции + GEO..."
+            )
+    else:
+        # Non-store categories
+        try:
+            await status_msg.edit_text(
+                f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
+                f"{'✅' if site_analysis else '⏭️'} Шаг 1/4: "
+                f"{'Анализ сайта — готов' if site_analysis else 'Анализ сайта — пропущен'}\n"
+                f"⏳ Шаг 2/4: AI-анализ концепции + GEO + ключевые слова..."
+            )
+        except Exception:
+            pass
 
     # ─── Step 4: Get improved analysis from AI (category-specific) ───
     improve_prompt = IMPROVE_PROMPTS.get(category, PROMPT_IMPROVE_STORES)
@@ -4359,13 +4333,18 @@ async def callback_improve(callback: CallbackQuery) -> None:
     safe_file_name = imp_name.lower().replace(" ", "-")[:50]
     try:
         document = FSInputFile(tmp_path, filename=f"{safe_file_name}-site.zip")
+        product_info = ""
+        if category == "stores" and store_products:
+            product_info = f"\n🛍 Товаров в каталоге: {len(store_products)}"
+        elif category == "stores" and not store_products:
+            product_info = "\n⚠️ Каталог не спарсен (сайт блокирует парсинг)"
         sent = await safe_send_document(
             chat_id,
             document,
             caption=(
                 f"📦 *{imp_name} — Готовый сайт*\n\n"
-                f"🎨 Дизайн: {'светлый бутик' if category == 'stores' else 'тёмный Web3' if category == 'crypto' else 'корпоративный B2B'}\n"
-                f"{'🛍 Магазин: акция + каталог товаров' if category == 'stores' else '⚡ Кастомный премиальный сайт'}\n"
+                f"🎨 Дизайн: {'светлый бутик' if category == 'stores' else 'тёмный Web3' if category == 'crypto' else 'корпоративный B2B'}"
+                f"{product_info}\n"
                 f"Разархивируй → открой index.html в браузере"
             ),
         )
@@ -4383,10 +4362,18 @@ async def callback_improve(callback: CallbackQuery) -> None:
 
     # ─── Step 12: Final status update ───
     try:
+        product_line = ""
+        if category == "stores":
+            if store_products:
+                product_line = f"🛍 Каталог: {len(store_products)} товаров из {current_shop_url}"
+            else:
+                product_line = f"⚠️ Каталог не спарсен (сайт блокирует парсинг)"
         await status_msg.edit_text(
             f"🏷 *{cat_label}* | ✅ *{imp_name} — готов!*\n\n"
             f"📊 Анализ + GEO + Ключевые слова — выше\n"
-            f"📦 Готовый сайт ({'светлый бутик + каталог' if category == 'stores' else 'тёмный Web3' if category == 'crypto' else 'корпоративный B2B'}) — в архиве\n\n"
+            f"{'📦 ' + product_line if product_line else ''}"
+            f"{'📦 Готовый сайт (тёмный Web3)' if category == 'crypto' else ''}"
+            f"{'📦 Готовый сайт (корпоративный B2B)' if category == 'companies' else ''}\n\n"
             f"💡 Нажми кнопку ещё раз для нового варианта!"
         )
     except Exception:

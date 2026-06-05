@@ -1686,7 +1686,8 @@ def _build_promo_html(category: str, products: list, t: dict, ph_bg: str, ph_fg:
     """Build the promo/sale block HTML (stores only). Empty string for other categories."""
     if category != "stores" or not products:
         return ""
-    p = products[0]  # Use the first product as the promo item
+    import random as _random
+    p = _random.choice(products)  # Random product from THIS catalog
     img_src = p.get("image", "")
     prod_name = p.get("name", "Выбранный товар")
     price_raw = p.get("price", "")
