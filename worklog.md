@@ -19,3 +19,29 @@ Stage Summary:
 - No external file references that could break when extracted
 - Dark theme, glassmorphism, gradients, animations, burger menu, FAQ accordion — all preserved
 - Deploy in progress on Render
+---
+Task ID: 1
+Agent: main
+Task: Add store architecture — promo block + product catalog + cart modal
+
+Work Log:
+- Added beautifulsoup4==4.12.3 and lxml==5.1.0 to requirements.txt
+- Added parse_store_products() async function in bot.py with 3 parsing strategies (CSS selectors, product links, price+image containers)
+- Added promo CSS block (stores only): sale badge, old/new price layout, discount tag
+- Added catalog grid CSS (stores only): 3-col responsive grid, product cards with hover effects
+- Added cart modal CSS: centered modal with product name and auto-dismiss after 2.5s
+- Added _build_promo_html() helper: renders first product with -30% discount calculation
+- Added _build_catalog_html() helper: renders all parsed products in grid
+- Added _build_cart_modal_html() helper: renders cart confirmation modal
+- Updated _nav_items() to include "Catalog" link for stores
+- Updated _generate_html() to accept and pass products parameter
+- Updated generate_premium_site() to accept products parameter
+- Updated callback_improve() to call parse_store_products() for stores and pass results
+- Added responsive CSS for promo (stacks on tablet/mobile) and catalog (2→1 columns)
+- All new sections only render when category="stores"; crypto/companies unchanged
+
+Stage Summary:
+- Commit 55206b3 pushed to GitHub
+- Render deploy dep-d8hcmjddt1ts738aa0kg triggered (build_in_progress)
+- Files changed: site_generator.py (+470 lines), bot.py (+154 lines), requirements.txt (+2 deps)
+---
