@@ -2,7 +2,7 @@
 EU Trend Analytics Bot v15.0 — Deep Niche All Categories
 ==========================================================================
 AI-powered trend discovery with "Improved Offer" feature:
-  1. Trendy fashion brands (niche, viral, emerging — NOT mainstream)
+  1. Trendy DTC stores (young, hyped, viral products across ALL categories)
   2. Trending crypto projects (DEEP NICHE: AI, DePIN, RWA, L2/L3, DeSci, Bitcoin DeFi)
   3. Hot startups & companies (Series A-C, pre-IPO — NOT Fortune 500)
 
@@ -859,20 +859,22 @@ async def validate_store_site(url: str) -> dict:
 
 
 async def search_stores_deep() -> list[dict]:
-    """Search for young, parseable Shopify/WooCommerce fashion brands.
+    """Search for young, parseable Shopify/WooCommerce/Squarespace DTC stores.
 
     Strategy:
-    1. Ask AI for young DTC brands (30s timeout)
-    2. VALIDATE each brand: check /products.json, /wp-json/, HTML signatures
+    1. Ask AI for young European DTC stores across ALL categories (30s timeout)
+    2. VALIDATE each store: check /products.json, /wp-json/, HTML signatures
     3. Filter: keep only accessible sites with known platform
     4. Add parseability status to each item
     """
     try:
         items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=30)
         if items and len(items) >= 3:
+            # New format: name, category, why_hyping, link, country, platform
+            # Also accept old format: name, style, link for backward compat
             valid = [
                 item for item in items
-                if all(item.get(k) for k in ("name", "style", "link"))
+                if item.get("name") and item.get("link")
             ]
             if len(valid) >= 3:
                 logger.info(f"[StoresSearch] AI returned {len(valid)} brands, validating...")
@@ -1595,59 +1597,60 @@ Return ONLY a valid JSON array of exactly 8 companies, nothing else:
 # IMPROVED OFFER PROMPTS — CATEGORY-SPECIFIC
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_IMPROVE_STORES = """You are a legendary fashion tech innovator and luxury brand strategist.
+PROMPT_IMPROVE_STORES = """You are a legendary e-commerce tech innovator and DTC brand strategist.
 
-A client brings you this fashion brand:
+A client brings you this online store:
 NAME: {name}
 DESCRIPTION: {description}
 ORIGINAL LINK: {link}
-CATEGORY: Fashion Brand
+CATEGORY: Online Store
 
-Your task — create a DEEPLY ANALYZED improved fashion brand concept.
+Your task — create a DEEPLY ANALYZED improved online store concept.
 
-CRITICAL RULES FOR FASHION BRANDS:
-- The improvement must be SPECIFIC to fashion/retail — NOT generic tech buzzwords
-- Think about: AI stylist, virtual try-on, capsule wardrobe subscriptions, metaverse shopping, sustainability-tech, size-inclusive AI, AR fitting rooms, social commerce
-- The improved name must be a creative evolution (e.g., GANNI → GANNI Aura, COS → COS Atelier, Sézane → Sézane Maison, Veja → Veja ONE)
-- NEVER use "Pro", "2.0", "+" suffixes — the name must feel like a natural fashion brand extension
-- The improvement must address real fashion industry pain points: returns, sizing, sustainability, discovery
+CRITICAL RULES FOR DTC STORES:
+- The improvement must be SPECIFIC to the store's product category — NOT generic tech buzzwords
+- Analyze what category this store is in (gadgets, home decor, skincare, fitness, pet supplies, coffee, kitchen, outdoor, etc.) and tailor the innovation accordingly
+- Think about: AI-powered personalization, subscription models, AR product preview, community features, sustainability, smart packaging, loyalty/rewards, social commerce, influencer collab platform
+- The improved name must be a creative evolution (e.g., BrewDog → BrewDog Craft Lab, Bower Collective → Bower Home, FiID → FiID Motion)
+- NEVER use "Pro", "2.0", "+" suffixes — the name must feel like a natural brand extension
+- The improvement must address real e-commerce pain points: discovery, trust, returns, personalization, repeat purchases
 - Mention "{name}" by name to ensure customization
 
-EXAMPLE transformations:
-- COS (minimalism) → COS Atelier: AI builds a capsule wardrobe from your body type, lifestyle, and color palette with virtual try-on and garment rental
-- GANNI (playful sustainable) → GANNI Aura: Each piece comes with a digital twin in the metaverse, NFC authentication against counterfeits, and a circular economy resale marketplace built in
-- Veja (sustainable sneakers) → Veja ONE: Custom biometric sneakers 3D-printed from recycled ocean plastic, with an app tracking your carbon footprint per step
+EXAMPLE transformations (adapt to the actual store category):
+- Wild deodorant → Wild Collective: AI-powered personalized refill schedule based on usage patterns, community-driven new scent voting, carbon-neutral last-mile delivery
+- Bower Collective → Bower Home: Smart home dispensers auto-order refills via IoT sensors, family usage analytics dashboard, gamified sustainability challenges with rewards
+- Coffee Duck → Coffee Duck Roasters: AI-curated monthly coffee box based on taste profile quiz, live roasting sessions on TikTok Shop, NFC-enabled bags with farm-of-origin stories
 
 Return a JSON object with EXACTLY these fields:
 
-1. "improved_name": A fashion-forward evolution name of "{name}"
+1. "improved_name": A creative evolution name of "{name}"
 
-2. "improved_description": 3-4 vivid sentences describing the improved fashion concept. What specific tech/fashion innovation was added? How does it change the shopping experience? Why would Gen Z and Millennials obsess over it?
+2. "improved_description": 3-4 vivid sentences describing the improved store concept. What specific tech/innovation was added? How does it change the shopping experience? Why would customers obsess over it?
 
-3. "improved_link": A stylized fashion URL (e.g. https://brandname-atelier.com or .store or .fashion)
+3. "improved_link": A stylized URL (e.g. https://brandname-lab.com or .store or .co or .shop)
 
-4. "killer_feature": 1 sentence about the ONE fashion-tech feature that makes this irresistible
+4. "killer_feature": 1 sentence about the ONE feature that makes this irresistible
 
-5. "geo_analysis": An OBJECT for fashion brand traffic:
+5. "geo_analysis": An OBJECT for DTC store traffic:
 {{
-  "tier1": [list of 3-4 top fashion markets with 1-line reason — think: Scandinavia, France, UK, Italy, Germany, Netherlands],
+  "tier1": [list of 3-4 top markets with 1-line reason — think: UK, Germany, Netherlands, France, Scandinavia, Switzerland],
   "tier2": [list of 3-4 secondary markets],
-  "tier3": [list of 2-3 emerging fashion markets],
-  "best_platforms": [list of 3-4 platforms — Instagram, Pinterest, TikTok are MUST-HAVE for fashion],
+  "tier3": [list of 2-3 emerging markets],
+  "best_platforms": [list of 3-4 platforms — TikTok, Instagram, Pinterest, Google Shopping are MUST-HAVE for DTC],
   "budget_split": "suggested budget % split between GEOs and platforms",
   "estimated_cpa": "estimated CPA range in USD for tier1"
 }}
 
-6. "keywords": Fashion-specific SEO and PPC keywords:
+6. "keywords": Category-specific SEO and PPC keywords:
 {{
   "branded": [3-4 branded keywords],
-  "generic": [4-5 high-volume fashion keywords],
-  "long_tail": [4-5 long-tail fashion keywords],
-  "competitor": [2-3 competitor brand keywords],
+  "generic": [4-5 high-volume category keywords],
+  "long_tail": [4-5 long-tail category keywords],
+  "competitor": [2-3 competitor keywords],
   "negative": [2-3 negative keywords]
 }}
 
-7. "target_audience": 2-3 sentences about the ideal fashion customer (age, style preferences, shopping behavior, income level, values like sustainability)
+7. "target_audience": 2-3 sentences about the ideal customer (age, interests, shopping behavior, income level, values)
 
 Return ONLY the JSON object. No markdown, no code blocks, just raw JSON."""
 
@@ -1801,15 +1804,27 @@ async def detect_category(name: str, desc: str, link: str) -> str:
     crypto_tlds = [".io", ".xyz", ".network", ".protocol", ".fi", ".finance", ".eth", ".sol", ".chain"]
     crypto_symbols = re.findall(r"\([A-Z]{2,6}\)", name)  # ticker like (SPEC), (VIRTUAL)
 
-    # Store/brand signals
+    # Store/brand signals (broad — any DTC e-commerce, not just fashion)
     store_keywords = [
         "fashion", "clothing", "brand", "boutique", "womenswear", "menswear",
         "streetwear", "sneakers", "accessories", "collection", "apparel",
         "sustainable fashion", "designer", "шоп", "одежда", "мода",
         "style", "luxury", "ready-to-wear", "rtw", "couture", "runway",
         "silhouette", "fabric", "sewing", "textile", "knitwear",
+        # Non-fashion DTC signals
+        "store", "shop", "магазин", "товары", "продукты", "buy", "order",
+        "кастом", "handmade", "handcrafted", "organic", "eco-friendly",
+        "skincare", "cosmetics", "косметика", "уход", "fragrance",
+        "coffee", "matcha", "кофе", "спешелти", "gourmet", "food",
+        "fitness", "gym", "workout", "yoga", "pilates",
+        "pet", "собака", "кошка", "зоотовары", "pet supplies",
+        "home", "decor", "декор", "interior", "kitchen", "кухня",
+        "gadgets", "гаджеты", "smart", "wireless", "tech",
+        "outdoor", "travel", "camping", "hiking",
+        "stationery", "канцелярия", "craft", "hobby", "хобби",
+        "beer", "craft beer", "wine", "кrafт",
     ]
-    store_tlds = [".com", ".store", ".fashion", ".shop", ".co", ".fr", ".dk", ".se"]
+    store_tlds = [".com", ".store", ".fashion", ".shop", ".co", ".fr", ".dk", ".se", ".de", ".nl", ".it", ".es"]
 
     # Score each category
     scores = {"crypto": 0, "stores": 0, "companies": 0}
@@ -1849,7 +1864,7 @@ Description: {desc[:300]}
 Website: {link}
 
 Categories:
-- "stores" — Fashion brands, clothing stores, lifestyle brands, DTC brands, boutiques, e-commerce brands
+- "stores" — DTC online stores, e-commerce brands, product shops (any category: gadgets, home, beauty, fitness, food, pet, etc.)
 - "crypto" — Crypto projects, DeFi protocols, blockchain platforms, Web3 apps, token projects, DAOs
 - "companies" — Tech startups, SaaS companies, biotech, defense tech, AI companies, enterprise software
 
@@ -2051,198 +2066,214 @@ TECHNICAL REQUIREMENTS:
 FALLBACK_STORES: list[dict] = []  # Kept for compat; use FALLBACK_STORES_POOLS instead
 
 FALLBACK_STORES_POOLS: list[list[dict]] = [
-    # ── Pool 1: Young Shopify/WooCommerce DTC brands ──
+    # ── Pool 1: Young European DTC stores — diverse categories ──
     [
         {
-            "name": "House of Sunny",
-            "style": (
-                "Лондонский бренд вирусных платьев — сарафан Hattie стал #1 "
-                "на TikTok в 2025. Яркие принты, 70-е эстетика, accessible luxury для Gen Z."
+            "name": "Bower Collective",
+            "category": "eco home products",
+            "why_hyping": (
+                "Британский бренд эко-рефиллов для дома — вирусный на TikTok за zero-waste концепцию. "
+                "£5M+ revenue за первый год, 10K+ подписчиков на подмену."
             ),
-            "link": "https://www.houseofsunny.co.uk",
+            "link": "https://bowercollective.com",
             "country": "UK",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
             "product_count": 0,
         },
         {
-            "name": "Sleeper",
-            "style": (
-                "Украинский бренд одёжки-как-уличной. Пижамные костюмы и "
-                "шёлковые платья носят Зендай и Бейонсе. $100M+ revenue."
+            "name": "Wild deodorant",
+            "category": "personal care",
+            "why_hyping": (
+                "Британский натуральный дезодорант в рефиллах — вирусный на TikTok. "
+                "10K+ заказов/мес, инвестиции от Dragons\' Den, zero-waste хайп."
             ),
-            "link": "https://sleeper.com.ua",
-            "country": "Ukraine",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Rat & Boa",
-            "style": (
-                "Курортная одежда с вирусным хайпом у блогеров. Платья и "
-                "комбинезоны для отпуска — каждый дроп раскупается за часы."
-            ),
-            "link": "https://ratandboa.com",
+            "link": "https://www.wearewild.com",
             "country": "UK",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
             "product_count": 0,
         },
         {
-            "name": "BITE Studios",
-            "style": (
-                "Стокгольмский sustainable fashion — минимализм из переработанных "
-                "материалов. Фаворит скандинавских fashion-инфлюенсеров."
+            "name": "Oddbox",
+            "category": "food & grocery",
+            "why_hyping": (
+                "Британский сервис спасённых фруктов и овощей — хайп в TikTok за sustainability. "
+                "Блогеры показывают unboxing. 100K+ подписчиков, £50M+ valuation."
             ),
-            "link": "https://bitestudios.com",
+            "link": "https://www.oddbox.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "Coffee Duck",
+            "category": "specialty coffee",
+            "why_hyping": (
+                "Нидерландский спешелти-кофе и аксессуаров — вирусные видео с необычными "
+                "методами заваривания на TikTok. Продажи выросли в 5x за полгода."
+            ),
+            "link": "https://coffeeduck.com",
+            "country": "Netherlands",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "FiID",
+            "category": "fitness accessories",
+            "why_hyping": (
+                "Британский массажные роллы для фитнеса — вирусные видео с рекавери "
+                "после тренировок на TikTok. Хайп в фитнес-Instagram. 5K+ продаж/мес."
+            ),
+            "link": "https://fiid.co",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "Goula",
+            "category": "pet supplies",
+            "why_hyping": (
+                "Французский премиум-зоотовары — органические лакомства и аксессуары. "
+                "Владельцы питомцев в TikTok показывают unboxing. Раскупается с полок."
+            ),
+            "link": "https://www.goula.fr",
+            "country": "France",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "Lola's Apothecary",
+            "category": "natural cosmetics",
+            "why_hyping": (
+                "Британская натуральная косметика — эфирные масла и сыворотки. "
+                "Вирусные ASMR unboxing видео на TikTok. Раскупается за часы после дропов."
+            ),
+            "link": "https://www.lolasapothecary.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "Nudie Jeans",
+            "category": "sustainable fashion",
+            "why_hyping": (
+                "Шведский эко-джинсы — бесплатный ремонт и ресейл программа. "
+                "Вирусный sustainability контент на TikTok. 15K+ отремонтированных пар/мес."
+            ),
+            "link": "https://www.nudiejeans.com",
             "country": "Sweden",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
             "product_count": 0,
         },
-        {
-            "name": "Live The Process",
-            "style": (
-                "Спортивный luxury из Лос-Анджелеса. Йога и пилатес одежда "
-                "премиум-класса — вирусна в Instagram-сообществах wellness."
-            ),
-            "link": "https://livetheprocess.com",
-            "country": "USA",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "With Nothing Underneath",
-            "style": (
-                "Британский бренд рубашек — растёт дико. Минималистичные "
-                "рубашки идеального кроя для men и women. Хайп у стилистов."
-            ),
-            "link": "https://withnothingunderneath.com",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Les Girls Les Boys",
-            "style": (
-                "Бельё и уличная одежда — основан создательницей Intimissimi. "
-                "Shopify-бренд с культовым Instagram и вирусными дропами."
-            ),
-            "link": "https://lesgirlslesboys.com",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Diotima",
-            "style": (
-                "Ямайский luxury-бренд с афро-карибской эстетикой. "
-                "Ручная работа, фаворит Vogue, путь на Met Gala 2024."
-            ),
-            "link": "https://www.diotima.co",
-            "country": "Jamaica",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
     ],
-    # ── Pool 2: More young Shopify DTC brands ──
+    # ── Pool 2: More diverse young European DTC stores ──
     [
         {
-            "name": "Nagnata",
-            "style": (
-                "Австралийский knitwear из переработанного хлопка. "
-                "Архитектурный трикотаж — любимцы Vogue Australia и Net-a-Porter."
+            "name": "HAY",
+            "category": "home accessories",
+            "why_hyping": (
+                "Датский декор и канцелярия — яркие organizers и stationery. "
+                "Вирусный aesthetic content в TikTok, сотрудничество с COS и MoMA."
             ),
-            "link": "https://www.nagnata.com",
-            "country": "Australia",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Gimaguas",
-            "style": (
-                "Испанский boho-chic сестёр Сая и Пилар. Вязаные кардиганы "
-                "и шорты с фриволите — вирусный хит среди fashion-инфлюенсеров."
-            ),
-            "link": "https://www.gimaguas.com",
-            "country": "Spain",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Cult Gaia",
-            "style": (
-                "Лос-анджелесский бренд архитектурных аксессуаров. "
-                "Плетёные сумки Ark — самый фотографируемый аксессуар года."
-            ),
-            "link": "https://www.cultgaia.com",
-            "country": "USA",
-            "platform_detected": "Shopify",
-            "parse_status": "✅ Shopify",
-            "product_count": 0,
-        },
-        {
-            "name": "Helsa",
-            "style": (
-                "Скандинавский минимализм с хайпом в TikTok. Чистые линии, "
-                "натуральные ткани — эстетика «тихой роскоши» для Gen Z."
-            ),
-            "link": "https://helsa.com",
+            "link": "https://hay.dk",
             "country": "Denmark",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
             "product_count": 0,
         },
         {
-            "name": "Aligne",
-            "style": (
-                "Молодой британский бренд с идеальной посадкой. Брюки и "
-                "блейзеры с вирусной репутацией в TikTok #AligneStyle."
+            "name": "Alder",
+            "category": "outdoor gear",
+            "why_hyping": (
+                "Швейцарский уличные аксессуары — минималистичные сумки и термосы. "
+                "Вирусные outdoor-эстетика видео на TikTok. Продажи +400% за 6 мес."
             ),
-            "link": "https://aligne.co.uk",
-            "country": "UK",
+            "link": "https://alder-shop.ch",
+            "country": "Switzerland",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
             "product_count": 0,
         },
         {
-            "name": "Pangaia",
-            "style": (
-                "London-based materials science бренд. Биотехнологичные "
-                "ткани из seaweed и flowers. Культовый Instagram, $100M+ revenue."
+            "name": "Olsens",
+            "category": "home decor",
+            "why_hyping": (
+                "Датский скандинавский декор — вирусные TikTok-видео с организацией "
+                "пространства набирают 500K+ просмотров. Продажи +200% за квартал."
             ),
-            "link": "https://pangaia.com",
-            "country": "UK",
+            "link": "https://olsens.dk",
+            "country": "Denmark",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
             "product_count": 0,
         },
         {
-            "name": "Kowtow",
-            "style": (
-                "Новозеландский sustainable бренд — органический хлопок и "
-                "честная торговля. Минималистичный дизайн с характером."
+            "name": "Rituals",
+            "category": "wellness & home fragrance",
+            "why_hyping": (
+                "Нидерландские ароматические продукты — вирусные unboxing видео на TikTok. "
+                "Знаменитости в Instagram Stories. Огромный рост продаж в EU."
             ),
-            "link": "https://kowtowclothing.com",
-            "country": "New Zealand",
+            "link": "https://www.rituals.com",
+            "country": "Netherlands",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
             "product_count": 0,
         },
         {
-            "name": "Maryam Nassir",
-            "style": (
-                "Лондонский brand с Ближним Востоком эстетикой. "
-                "Вязаные платья и абayas с современным подходом — растёт в TikTok."
+            "name": "Yebo",
+            "category": "home & living",
+            "why_hyping": (
+                "Немецкий уютный декор и текстиль — Instagram Reels с трансформациями "
+                "интерьера собирают миллионы. Блогеры рекомендуют как must-have 2025."
             ),
-            "link": "https://maryamnassir.com",
+            "link": "https://www.yebo-life.com",
+            "country": "Germany",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "Pebble Mag",
+            "category": "kids toys",
+            "why_hyping": (
+                "Шведский эко-игрушки для детей — деревянные ручной работы. "
+                "Мамы-блогеры в TikTok показывают игры детей. 20K+ заказов/мес."
+            ),
+            "link": "https://pebblemag.se",
+            "country": "Sweden",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "Nord Skincare",
+            "category": "skincare",
+            "why_hyping": (
+                "Норвежская минималистичная уходовая косметика — TikTok обзоры "
+                "набрали 1M+ просмотров. Продукция раскупается за дни после дропа."
+            ),
+            "link": "https://nordskincare.com",
+            "country": "Norway",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "BrewDog",
+            "category": "craft beer",
+            "why_hyping": (
+                "Шотландский крафтовый пивовар — хайп в TikTok за необычные сорта. "
+                "Блогеры делают обзоры нового пива. 10K+ онлайн-заказов/мес."
+            ),
+            "link": "https://www.brewdog.com",
             "country": "UK",
             "platform_detected": "Shopify",
             "parse_status": "✅ Shopify",
@@ -4325,19 +4356,19 @@ CATEGORY_FALLBACKS: dict[str, list] = {
 }
 
 CATEGORY_TITLES: dict[str, str] = {
-    "stores": "ТРЕНДОВЫЕ БРЕНДЫ ЕВРОПЫ",
+    "stores": "ТРЕНДОВЫЕ МАГАЗИНЫ ЕВРОПЫ",
     "crypto": "ТРЕНДОВАЯ КРИПТА",
     "companies": "ТРЕНДОВЫЕ КОМПАНИИ",
 }
 
 CATEGORY_NAMES: dict[str, str] = {
-    "stores": "Fashion Brand",
+    "stores": "DTC Store",
     "crypto": "Crypto Project",
     "companies": "Startup/Company",
 }
 
 CATEGORY_SEARCH_MESSAGES: dict[str, str] = {
-    "stores": "🔍 *Ищу трендовые бренды Европы...*",
+    "stores": "🔍 *Ищу молодые хайпующие магазины Европы...*",
     "crypto": "🔍 *Ищу трендовые крипто-проекты...*",
     "companies": "🔍 *Ищу трендовые стартапы...*",
 }
