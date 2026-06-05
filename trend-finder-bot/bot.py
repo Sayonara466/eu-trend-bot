@@ -847,38 +847,41 @@ async def search_stores_deep() -> list[dict]:
                             f"no JSON products ({platform})"
                         )
 
-                if len(verified_items) >= 3:
+                if len(verified_items) >= 7:
                     logger.info(f"[StoresSearch] {len(verified_items)} stores VERIFIED with JSON")
-                    return verified_items[:8]
+                    return verified_items[:10]
 
-                # ── Not enough verified — try ONE more AI call ──
+                # ── Not enough verified — keep trying until 7+ ──
+                needed = 7 - len(verified_items)
                 logger.info(
                     f"[StoresSearch] Only {len(verified_items)} verified, "
-                    f"retrying AI with stricter prompt..."
+                    f"need {needed} more — retrying AI ({needed} more calls max)..."
                 )
-                items2 = await asyncio.wait_for(ask_ai_list(PROMPT_STORES_RETRY), timeout=30)
-                if items2:
-                    valid2 = [i for i in items2 if i.get("name") and i.get("link")]
-                    # Skip already-checked URLs
-                    checked_urls = {item.get("link", "") for item in valid}
-                    fresh = [i for i in valid2 if i.get("link", "") not in checked_urls]
-                    if fresh:
-                        tasks2 = [validate_store_site(i.get("link", "")) for i in fresh]
-                        results2 = await asyncio.gather(*tasks2, return_exceptions=True)
-                        for item, result in zip(fresh, results2):
-                            if isinstance(result, Exception):
-                                continue
-                            accessible = result.get("accessible", False)
-                            pcount = result.get("product_count", 0)
-                            if accessible and pcount > 0:
-                                item["platform_detected"] = result.get("platform", "unknown")
-                                item["product_count"] = pcount
-                                item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
-                                verified_items.append(item)
-                                logger.info(f"[StoresSearch] ✅ RETRY VERIFIED {item.get('name')}")
+                checked_urls = {item.get("link", "") for item in valid}
+                for attempt in range(3):  # up to 3 retry calls
+                    if len(verified_items) >= 7:
+                        break
+                    items2 = await asyncio.wait_for(ask_ai_list(PROMPT_STORES_RETRY), timeout=30)
+                    if items2:
+                        fresh = [i for i in items2 if i.get("name") and i.get("link", "") not in checked_urls]
+                        if fresh:
+                            tasks2 = [validate_store_site(i.get("link", "")) for i in fresh]
+                            results2 = await asyncio.gather(*tasks2, return_exceptions=True)
+                            for item, result in zip(fresh, results2):
+                                if isinstance(result, Exception):
+                                    continue
+                                accessible = result.get("accessible", False)
+                                pcount = result.get("product_count", 0)
+                                if accessible and pcount > 0:
+                                    item["platform_detected"] = result.get("platform", "unknown")
+                                    item["product_count"] = pcount
+                                    item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                                    verified_items.append(item)
+                                    checked_urls.add(item.get("link", ""))
+                                    logger.info(f"[StoresSearch] ✅ RETRY-{attempt+1} VERIFIED {item.get('name')}")
 
                 if len(verified_items) >= 3:
-                    return verified_items[:8]
+                    return verified_items[:10]
 
     except asyncio.TimeoutError:
         logger.warning("[StoresSearch] AI timed out")
@@ -919,7 +922,7 @@ async def _get_validated_fallback_stores() -> list[dict]:
 
     if len(verified) >= 3:
         logger.info(f"[FallbackStores] {len(verified)}/{len(pool)} VERIFIED")
-        return verified[:8]
+        return verified[:10]
 
     # Try second pool if first didn't yield enough
     if len(FALLBACK_STORES_POOLS) > 1:
@@ -940,7 +943,7 @@ async def _get_validated_fallback_stores() -> list[dict]:
                     logger.info(f"[FallbackStores] ✅ POOL2 VERIFIED {item.get('name')}")
 
     if len(verified) >= 3:
-        return verified[:8]
+        return verified[:10]
 
     # Even if <3, return ONLY verified ones (never unverified)
     logger.warning(f"[FallbackStores] Only {len(verified)} verified across all pools")
@@ -1136,21 +1139,20 @@ async def analyze_original_site(url: str) -> dict:
 
 
 async def parse_store_products(url: str, desc: str = "", name: str = "") -> list[dict]:
-    """Scrape product data from an online store with multi-strategy approach.
+    """Scrape product data from an online store.
 
-    Strategies:
-      1. Try main URL + subpages (/shop, /collections/all, etc.)
-      2. Extract from JSON-LD structured data
-      3. Extract all product-like images from page
-      4. AI-generated products based on brand description (informed by store data)
+    PRIORITY ORDER (matches validate_store_site exactly):
+      1. Shopify /products.json — SAME endpoint validator confirmed works
+      2. WooCommerce /wp-json/wc/v3/products — SAME endpoint validator confirmed works
+      3. HTML fallback: JSON-LD, CSS selectors, product links (only if JSON fails)
     """
     if not url:
         return []
 
     try:
-        from bs4 import BeautifulSoup
         import json as _json
         from urllib.parse import urljoin, urlparse
+        from bs4 import BeautifulSoup
 
         BROWSER_HEADERS = {
             "User-Agent": (
@@ -1162,270 +1164,275 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
                       "image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Accept-Encoding": "gzip, deflate, br",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Ch-Ua": '"Google Chrome";v="125", "Chromium";v="125"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
+        }
+        JSON_HEADERS = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json",
         }
 
         products: list[dict] = []
+        base = url.rstrip("/")
 
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
 
-            # ── Try main URL and common subpages ──
-            base = url.rstrip("/")
-            paths_to_try = [
-                base + "/shop",
-                base + "/collections/all",
-                base + "/en/shop",
-                base + "/en/collections/all",
-                base + "/shop-all",
-                base + "/category/all",
-                base + "/new",
-                base + "/en/new",
-                base + "/products",
-            ]
-            urls_to_try = [base] + paths_to_try
+            # ═══════════════════════════════════════════════════════════
+            # PRIORITY 1: Shopify /products.json — SAME as validator
+            # ═══════════════════════════════════════════════════════════
+            try:
+                resp = await client.get(f"{base}/products.json", headers=JSON_HEADERS)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    shopify_products = data.get("products", [])
+                    if shopify_products:
+                        for sp in shopify_products:
+                            pname = sp.get("title", "")
+                            pimages = sp.get("images", [])
+                            img = pimages[0].get("src", "") if pimages else ""
+                            if not img:
+                                # Try featured_image in variants
+                                variants = sp.get("variants", [])
+                                if variants:
+                                    img = variants[0].get("featured_image", {}).get("src", "")
+                            pprice = ""
+                            variants = sp.get("variants", [])
+                            if variants:
+                                pprice = variants[0].get("price", "")
+                                currency = sp.get("vendor", "")
+                            # Normalize image URL
+                            if img and img.startswith("//"):
+                                img = "https:" + img
+                            elif img and img.startswith("/"):
+                                parsed = urlparse(url)
+                                img = f"{parsed.scheme}://{parsed.netloc}{img}"
 
-            for try_url in urls_to_try:
-                try:
-                    resp = await client.get(try_url, headers=BROWSER_HEADERS)
-                    if resp.status_code != 200:
-                        continue
-                    html = resp.text[:300000]
-                    soup = BeautifulSoup(html, "lxml")
-
-                    # ── Strategy A: JSON-LD Product / ItemList ──
-                    for script_tag in soup.find_all("script", type="application/ld+json"):
-                        try:
-                            data = _json.loads(script_tag.string)
-                            items = []
-                            if isinstance(data, dict):
-                                if data.get("@type") == "ItemList":
-                                    items = data.get("itemListElement", [])
-                                elif data.get("@graph"):
-                                    items = data.get("@graph", [])
-                                elif data.get("@type") == "Product":
-                                    items = [data]
-                            if isinstance(data, list):
-                                items = data
-
-                            for item in items:
-                                p_type = item.get("@type", "")
-                                if p_type in ("Product", "ListItem"):
-                                    prod = item.get("item", item)
-                                    if prod.get("@type") != "Product":
-                                        continue
-                                    pname = prod.get("name", "")
-                                    pimg = ""
-                                    offers = prod.get("offers", {})
-                                    if isinstance(offers, dict):
-                                        pimg = offers.get("image", "") or prod.get("image", "")
-                                        price = offers.get("price", "")
-                                        currency = offers.get("priceCurrency", "")
-                                        if price and currency:
-                                            price = f"{currency}{price}"
-                                    elif isinstance(offers, list) and offers:
-                                        pimg = offers[0].get("image", "") or prod.get("image", "")
-                                        price = offers[0].get("price", "")
-                                        currency = offers[0].get("priceCurrency", "")
-                                        if price and currency:
-                                            price = f"{currency}{price}"
-                                    else:
-                                        pimg = prod.get("image", "")
-                                        price = ""
-
-                                    if not pimg and isinstance(pimg, list):
-                                        pimg = pimg[0] if pimg else ""
-                                    if isinstance(pimg, dict):
-                                        pimg = pimg.get("url", "")
-
-                                    if pname and pimg:
-                                        if pimg.startswith("//"):
-                                            pimg = "https:" + pimg
-                                        elif pimg.startswith("/"):
-                                            pimg = f"https://{urlparse(url).netloc}{pimg}"
-                                        products.append({
-                                            "name": pname[:120],
-                                            "image": pimg[:500],
-                                            "price": str(price)[:60] if price else "",
-                                        })
-                        except Exception:
-                            continue
-
-                    if len(products) >= 4:
-                        logger.info(f"[ParseProducts] JSON-LD: {len(products)} from {try_url}")
-                        break
-
-                    # ── Strategy B: CSS product card selectors ──
-                    selectors = [
-                        "div.product-card", "div.product-item", "div.product",
-                        "li.product", "article.product",
-                        "div[class*='product-card']", "div[class*='productCard']",
-                        "div[class*='product_item']", "div[class*='item-card']",
-                        "div[class*='collection-item']", "a[class*='product']",
-                        "div[class*='card-product']",
-                    ]
-                    cards = []
-                    for sel in selectors:
-                        found = soup.select(sel)
-                        if len(found) >= 2:
-                            cards = found
-                            break
-
-                    # ── Strategy C: Product links with images ──
-                    if len(cards) < 2:
-                        for a_tag in soup.select("a[href]"):
-                            href = a_tag.get("href", "")
-                            if "/products/" in href or "/product/" in href:
-                                parent = a_tag.parent
-                                if parent and parent.find("img"):
-                                    cards.append(parent)
-                        cards = cards[:24]
-
-                    # ── Strategy D: Elements with both image and price ──
-                    if len(cards) < 2:
-                        price_els = soup.find_all(string=re.compile(r"[€$£₽]\s*\d+"))
-                        if len(price_els) >= 2:
-                            for pel in price_els:
-                                card = pel.parent
-                                while card and card.name != "body":
-                                    if card.find("img"):
-                                        cards.append(card)
-                                        break
-                                    card = card.parent
-
-                    # ── Extract from cards ──
-                    for card in cards[:24]:
-                        try:
-                            img_tag = card.find("img")
-                            if not img_tag:
-                                continue
-                            img_src = (
-                                img_tag.get("src") or
-                                img_tag.get("data-src") or
-                                img_tag.get("data-lazy-src") or ""
-                            )
-                            if not img_src:
-                                srcset = img_tag.get("data-srcset") or img_tag.get("srcset") or ""
-                                if srcset:
-                                    first_src = srcset.split(",")[0].strip().split()[0]
-                                    if first_src:
-                                        img_src = first_src
-                            if not img_src or "data:" in img_src:
-                                continue
-                            if img_src.startswith("//"):
-                                img_src = "https:" + img_src
-                            elif img_src.startswith("/"):
-                                parsed_base = urlparse(url)
-                                img_src = f"{parsed_base.scheme}://{parsed_base.netloc}{img_src}"
-
-                            pname = ""
-                            h_tag = card.find(["h3", "h2", "h4", "h5"])
-                            if h_tag:
-                                pname = h_tag.get_text(strip=True)
-                            if not pname:
-                                title_el = card.find(["p", "span"], class_=re.compile(r"title|name|product-name", re.I))
-                                if title_el:
-                                    pname = title_el.get_text(strip=True)
-                            if not pname:
-                                a_tag = card.find("a")
-                                if a_tag:
-                                    pname = (a_tag.get("title", "") or
-                                             a_tag.get("aria-label", "") or
-                                             a_tag.get_text(strip=True))
-
-                            price = ""
-                            price_tag = card.find(string=re.compile(r"[€$£₽]?\s*\d+[.,]\d{2}"))
-                            if price_tag:
-                                price = price_tag.strip()
-                            if not price:
-                                for cls_pat in ["price", "amount", "cost", "product-price", "money"]:
-                                    pt = card.find(class_=re.compile(cls_pat, re.I))
-                                    if pt:
-                                        price = pt.get_text(strip=True)
-                                        break
-
-                            if pname and img_src:
+                            if pname:
                                 products.append({
                                     "name": pname[:120],
-                                    "image": img_src[:500],
-                                    "price": price[:60] if price else "",
+                                    "image": img[:500] if img else "",
+                                    "price": pprice[:60] if pprice else "",
                                 })
-                        except Exception:
-                            continue
+                        if products:
+                            logger.info(
+                                f"[ParseProducts] ✅ Shopify /products.json: "
+                                f"{len(products)} products from {url}"
+                            )
+            except Exception as e:
+                logger.debug(f"[ParseProducts] /products.json failed: {e}")
 
-                    if len(products) >= 4:
-                        logger.info(f"[ParseProducts] Cards: {len(products)} from {try_url}")
-                        break
-
-                except Exception as e:
-                    logger.debug(f"[ParseProducts] {try_url} failed: {e}")
-                    continue
-
-            # ── Strategy E: Extract og:image + any product images from any loaded page ──
-            if len(products) < 3:
+            # ═══════════════════════════════════════════════════════════
+            # PRIORITY 2: WooCommerce /wp-json/wc/v3/products
+            # ═══════════════════════════════════════════════════════════
+            if not products:
                 try:
-                    resp = await client.get(base, headers=BROWSER_HEADERS)
+                    resp = await client.get(
+                        f"{base}/wp-json/wc/v3/products",
+                        headers=JSON_HEADERS,
+                    )
                     if resp.status_code == 200:
-                        html = resp.text[:200000]
+                        wc_products = resp.json()
+                        if isinstance(wc_products, list) and wc_products:
+                            for wp in wc_products:
+                                pname = wp.get("name", "")
+                                img = ""
+                                images = wp.get("images", [])
+                                if images:
+                                    img = images[0].get("src", "")
+                                pprice = wp.get("price", "")
+                                if img and img.startswith("//"):
+                                    img = "https:" + img
+                                if pname:
+                                    products.append({
+                                        "name": pname[:120],
+                                        "image": img[:500] if img else "",
+                                        "price": pprice[:60] if pprice else "",
+                                    })
+                            if products:
+                                logger.info(
+                                    f"[ParseProducts] ✅ WooCommerce JSON: "
+                                    f"{len(products)} products from {url}"
+                                )
+                except Exception as e:
+                    logger.debug(f"[ParseProducts] /wp-json/wc/v3/products failed: {e}")
+
+            # ═══════════════════════════════════════════════════════════
+            # PRIORITY 3: HTML fallback (only if JSON gave nothing)
+            # ═══════════════════════════════════════════════════════════
+            if not products:
+                paths_to_try = [
+                    base + "/shop",
+                    base + "/collections/all",
+                    base + "/en/shop",
+                    base + "/en/collections/all",
+                    base + "/shop-all",
+                    base + "/category/all",
+                    base + "/new",
+                    base + "/en/new",
+                    base + "/products",
+                ]
+                urls_to_try = [base] + paths_to_try
+
+                for try_url in urls_to_try:
+                    try:
+                        resp = await client.get(try_url, headers=BROWSER_HEADERS)
+                        if resp.status_code != 200:
+                            continue
+                        html = resp.text[:300000]
                         soup = BeautifulSoup(html, "lxml")
 
-                        # og:image
-                        og_img = soup.find("meta", property="og:image")
-                        if og_img and og_img.get("content"):
-                            products.append({
-                                "name": name or "Featured Product",
-                                "image": og_img["content"][:500],
-                                "price": "",
-                            })
-
-                        # All large images from the page
-                        all_imgs = soup.find_all("img")
-                        for img in all_imgs:
-                            src = img.get("src") or img.get("data-src") or ""
-                            if not src or "data:" in src or src.startswith("data:"):
-                                continue
-                            w = img.get("width", "")
-                            h = img.get("height", "")
-                            # Keep reasonably large images (product images)
+                        # ── Strategy A: JSON-LD Product / ItemList ──
+                        for script_tag in soup.find_all("script", type="application/ld+json"):
                             try:
-                                if w and int(w) < 150:
+                                data = _json.loads(script_tag.string)
+                                items = []
+                                if isinstance(data, dict):
+                                    if data.get("@type") == "ItemList":
+                                        items = data.get("itemListElement", [])
+                                    elif data.get("@graph"):
+                                        items = data.get("@graph", [])
+                                    elif data.get("@type") == "Product":
+                                        items = [data]
+                                if isinstance(data, list):
+                                    items = data
+
+                                for item in items:
+                                    p_type = item.get("@type", "")
+                                    if p_type in ("Product", "ListItem"):
+                                        prod = item.get("item", item)
+                                        if prod.get("@type") != "Product":
+                                            continue
+                                        pname = prod.get("name", "")
+                                        pimg = ""
+                                        offers = prod.get("offers", {})
+                                        if isinstance(offers, dict):
+                                            pimg = offers.get("image", "") or prod.get("image", "")
+                                            price = offers.get("price", "")
+                                            currency = offers.get("priceCurrency", "")
+                                            if price and currency:
+                                                price = f"{currency}{price}"
+                                        elif isinstance(offers, list) and offers:
+                                            pimg = offers[0].get("image", "") or prod.get("image", "")
+                                            price = offers[0].get("price", "")
+                                            currency = offers[0].get("priceCurrency", "")
+                                            if price and currency:
+                                                price = f"{currency}{price}"
+                                        else:
+                                            pimg = prod.get("image", "")
+                                            price = ""
+
+                                        if not pimg and isinstance(pimg, list):
+                                            pimg = pimg[0] if pimg else ""
+                                        if isinstance(pimg, dict):
+                                            pimg = pimg.get("url", "")
+
+                                        if pname and pimg:
+                                            if pimg.startswith("//"):
+                                                pimg = "https:" + pimg
+                                            elif pimg.startswith("/"):
+                                                pimg = f"https://{urlparse(url).netloc}{pimg}"
+                                            products.append({
+                                                "name": pname[:120],
+                                                "image": pimg[:500],
+                                                "price": str(price)[:60] if price else "",
+                                            })
+                            except Exception:
+                                continue
+
+                        if len(products) >= 4:
+                            logger.info(f"[ParseProducts] JSON-LD: {len(products)} from {try_url}")
+                            break
+
+                        # ── Strategy B: CSS product card selectors ──
+                        selectors = [
+                            "div.product-card", "div.product-item", "div.product",
+                            "li.product", "article.product",
+                            "div[class*='product-card']", "div[class*='productCard']",
+                            "div[class*='product_item']", "div[class*='item-card']",
+                            "div[class*='collection-item']", "a[class*='product']",
+                            "div[class*='card-product']",
+                        ]
+                        cards = []
+                        for sel in selectors:
+                            found = soup.select(sel)
+                            if len(found) >= 2:
+                                cards = found
+                                break
+
+                        # ── Strategy C: Product links with images ──
+                        if len(cards) < 2:
+                            for a_tag in soup.select("a[href]"):
+                                href = a_tag.get("href", "")
+                                if "/products/" in href or "/product/" in href:
+                                    parent = a_tag.parent
+                                    if parent and parent.find("img"):
+                                        cards.append(parent)
+                            cards = cards[:24]
+
+                        # ── Extract from cards ──
+                        for card in cards[:24]:
+                            try:
+                                img_tag = card.find("img")
+                                if not img_tag:
                                     continue
-                                if h and int(h) < 150:
+                                img_src = (
+                                    img_tag.get("src") or
+                                    img_tag.get("data-src") or
+                                    img_tag.get("data-lazy-src") or ""
+                                )
+                                if not img_src:
+                                    srcset = img_tag.get("data-srcset") or img_tag.get("srcset") or ""
+                                    if srcset:
+                                        first_src = srcset.split(",")[0].strip().split()[0]
+                                        if first_src:
+                                            img_src = first_src
+                                if not img_src or "data:" in img_src:
                                     continue
-                            except (ValueError, TypeError):
-                                pass
-                            if src.startswith("//"):
-                                src = "https:" + src
-                            elif src.startswith("/"):
-                                parsed_base = urlparse(url)
-                                src = f"{parsed_base.scheme}://{parsed_base.netloc}{src}"
-                            alt = img.get("alt", "") or ""
-                            parent_a = img.find_parent("a")
-                            href = parent_a.get("href", "") if parent_a else ""
-                            # Product-like images: linked to /product or have meaningful alt
-                            is_product = (
-                                "/product" in href or
-                                (alt and len(alt) > 10 and not any(
-                                    x in alt.lower() for x in
-                                    ["logo", "icon", "banner", "footer", "header",
-                                     "menu", "nav", "newsletter", "instagram"]
-                                ))
-                            )
-                            if is_product:
-                                pname = alt[:120] if alt else "Product"
-                                existing_srcs = {p["image"] for p in products}
-                                if src not in existing_srcs:
+                                if img_src.startswith("//"):
+                                    img_src = "https:" + img_src
+                                elif img_src.startswith("/"):
+                                    parsed_base = urlparse(url)
+                                    img_src = f"{parsed_base.scheme}://{parsed_base.netloc}{img_src}"
+
+                                pname = ""
+                                h_tag = card.find(["h3", "h2", "h4", "h5"])
+                                if h_tag:
+                                    pname = h_tag.get_text(strip=True)
+                                if not pname:
+                                    a_tag = card.find("a")
+                                    if a_tag:
+                                        pname = (a_tag.get("title", "") or
+                                                 a_tag.get("aria-label", "") or
+                                                 a_tag.get_text(strip=True))
+
+                                price = ""
+                                price_tag = card.find(string=re.compile(r"[€$£₽]?\s*\d+[.,]\d{2}"))
+                                if price_tag:
+                                    price = price_tag.strip()
+                                if not price:
+                                    for cls_pat in ["price", "amount", "cost", "product-price", "money"]:
+                                        pt = card.find(class_=re.compile(cls_pat, re.I))
+                                        if pt:
+                                            price = pt.get_text(strip=True)
+                                            break
+
+                                if pname and img_src:
                                     products.append({
-                                        "name": pname,
-                                        "image": src[:500],
-                                        "price": "",
+                                        "name": pname[:120],
+                                        "image": img_src[:500],
+                                        "price": price[:60] if price else "",
                                     })
-                except Exception:
-                    pass
+                            except Exception:
+                                continue
+
+                        if len(products) >= 4:
+                            logger.info(f"[ParseProducts] Cards: {len(products)} from {try_url}")
+                            break
+
+                    except Exception as e:
+                        logger.debug(f"[ParseProducts] {try_url} failed: {e}")
+                        continue
 
             # Deduplicate by image URL
             seen: set[str] = set()
@@ -1440,15 +1447,14 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
                 p["source_url"] = url
 
             logger.info(
-                f"[ParseProducts] Scraped {len(unique)} products STRICTLY from {url}"
+                f"[ParseProducts] Total {len(unique)} products from {url} "
+                f"(method: {'Shopify JSON' if unique else 'HTML'})"
             )
 
-            # NO AI fallback — return only real parsed products
-            # If empty, the caller handles it
             return unique[:60]
 
     except ImportError:
-        logger.warning("[ParseProducts] BeautifulSoup not installed")
+        logger.warning("[ParseProducts] Required lib not installed")
         return []
     except Exception as e:
         logger.warning(f"[ParseProducts] Failed for {url}: {e}")
