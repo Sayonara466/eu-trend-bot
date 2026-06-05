@@ -710,27 +710,272 @@ Return ONLY JSON."""
     return deduped
 
 
+async def validate_store_site(url: str) -> dict:
+    """Check if a store URL is on Shopify/WooCommerce and is parseable.
+
+    Returns dict:
+      {"accessible": bool, "platform": str, "product_count": int, "url": str}
+    """
+    if not url:
+        return {"accessible": False, "platform": "unknown", "product_count": 0, "url": url}
+
+    base = url.rstrip("/")
+
+    # Normalize URL
+    if not base.startswith("http"):
+        base = "https://" + base
+
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+            # ── Test 1: Shopify /products.json ──
+            try:
+                resp = await client.get(
+                    f"{base}/products.json",
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                        "Accept": "application/json",
+                    },
+                )
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        products = data.get("products", [])
+                        count = len(products)
+                        if count > 0:
+                            logger.info(f"[Validate] {url}: SHOPIFY ✅ ({count} products)")
+                            return {
+                                "accessible": True,
+                                "platform": "Shopify",
+                                "product_count": count,
+                                "url": base,
+                            }
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # ── Test 2: Shopify /collections/all?view=products ──
+            try:
+                resp = await client.get(
+                    f"{base}/collections/all?view=products",
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                    },
+                )
+                if resp.status_code == 200 and "product" in resp.text[:500].lower():
+                    logger.info(f"[Validate] {url}: SHOPIFY ✅ (collections/all)")
+                    return {
+                        "accessible": True,
+                        "platform": "Shopify",
+                        "product_count": -1,  # unknown exact count
+                        "url": base,
+                    }
+            except Exception:
+                pass
+
+            # ── Test 3: WooCommerce /wp-json/wc/v3/products ──
+            try:
+                resp = await client.get(
+                    f"{base}/wp-json/wc/v3/products",
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                    },
+                )
+                if resp.status_code == 200:
+                    logger.info(f"[Validate] {url}: WOOCOMMERCE ✅")
+                    return {
+                        "accessible": True,
+                        "platform": "WooCommerce",
+                        "product_count": -1,
+                        "url": base,
+                    }
+            except Exception:
+                pass
+
+            # ── Test 4: Check main page for Shopify/WooCommerce signatures ──
+            try:
+                resp = await client.get(
+                    base,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                      "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                    },
+                )
+                if resp.status_code == 200:
+                    html = resp.text[:50000]
+                    is_shopify = (
+                        "shopify" in html.lower() or
+                        "cdn.shopify.com" in html.lower() or
+                        "myshopify.com" in html.lower()
+                    )
+                    is_woo = (
+                        "woocommerce" in html.lower() or
+                        "wp-json" in html.lower() or
+                        "/wp-content/" in html.lower()
+                    )
+                    if is_shopify:
+                        logger.info(f"[Validate] {url}: SHOPIFY (detected in HTML) ✅")
+                        return {
+                            "accessible": True,
+                            "platform": "Shopify",
+                            "product_count": -1,
+                            "url": base,
+                        }
+                    if is_woo:
+                        logger.info(f"[Validate] {url}: WOOCOMMERCE (detected in HTML) ✅")
+                        return {
+                            "accessible": True,
+                            "platform": "WooCommerce",
+                            "product_count": -1,
+                            "url": base,
+                        }
+                    # Accessible but unknown platform — still useful
+                    if resp.status_code == 200:
+                        logger.info(f"[Validate] {url}: ACCESSIBLE but unknown platform")
+                        return {
+                            "accessible": True,
+                            "platform": "other",
+                            "product_count": -1,
+                            "url": base,
+                        }
+            except Exception:
+                pass
+
+            # ── All tests failed ──
+            logger.info(f"[Validate] {url}: ❌ BLOCKED or not parseable")
+            return {
+                "accessible": False,
+                "platform": "blocked",
+                "product_count": 0,
+                "url": base,
+            }
+
+    except Exception as e:
+        logger.warning(f"[Validate] {url}: Error: {e}")
+        return {"accessible": False, "platform": "error", "product_count": 0, "url": url}
+
+
 async def search_stores_deep() -> list[dict]:
-    """Search for trending niche European stores/brands.
+    """Search for young, parseable Shopify/WooCommerce fashion brands.
 
     Strategy:
-    1. Ask AI with strict niche prompt (25s timeout)
-    2. If AI fails, use rotated fallback pools
+    1. Ask AI for young DTC brands (30s timeout)
+    2. VALIDATE each brand: check /products.json, /wp-json/, HTML signatures
+    3. Filter: keep only accessible sites with known platform
+    4. Add parseability status to each item
     """
     try:
-        items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=25)
+        items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=30)
         if items and len(items) >= 3:
-            valid = [item for item in items if all(item.get(k) for k in ("name", "style", "link"))]
+            valid = [
+                item for item in items
+                if all(item.get(k) for k in ("name", "style", "link"))
+            ]
             if len(valid) >= 3:
-                logger.info(f"[StoresSearch] AI returned {len(valid)} brands")
+                logger.info(f"[StoresSearch] AI returned {len(valid)} brands, validating...")
+
+                # ── Validate each brand in parallel ──
+                validate_tasks = []
+                for item in valid:
+                    link = item.get("link", "").strip()
+                    validate_tasks.append(validate_store_site(link))
+
+                results = await asyncio.gather(*validate_tasks, return_exceptions=True)
+
+                validated_items = []
+                for item, result in zip(valid, results):
+                    if isinstance(result, Exception):
+                        logger.warning(f"[StoresSearch] Validation error for {item.get('link')}: {result}")
+                        item["platform_detected"] = "error"
+                        item["parse_status"] = "❌ Ошибка проверки"
+                        item["product_count"] = 0
+                        continue
+
+                    platform = result.get("platform", "unknown")
+                    accessible = result.get("accessible", False)
+                    pcount = result.get("product_count", 0)
+
+                    item["platform_detected"] = platform
+                    item["parse_status"] = (
+                        f"✅ Каталог доступен ({pcount} товаров)"
+                        if accessible and pcount > 0
+                        else f"✅ {platform}" if accessible
+                        else "❌ Защищён"
+                    )
+                    item["product_count"] = pcount
+
+                    # Keep only accessible sites (Shopify/WooCommerce/other accessible)
+                    if accessible:
+                        validated_items.append(item)
+                        logger.info(
+                            f"[StoresSearch] ✅ {item.get('name')}: "
+                            f"{platform} ({pcount} products)"
+                        )
+                    else:
+                        logger.info(
+                            f"[StoresSearch] ❌ FILTERED OUT {item.get('name')}: "
+                            f"not accessible"
+                        )
+
+                if len(validated_items) >= 3:
+                    logger.info(
+                        f"[StoresSearch] After validation: {len(validated_items)} valid brands"
+                    )
+                    return validated_items[:8]
+
+                # If too few passed validation, keep all with status info
+                logger.info(
+                    f"[StoresSearch] Only {len(validated_items)} passed validation, "
+                    f"returning all {len(valid)} with status"
+                )
                 return valid[:8]
+
     except asyncio.TimeoutError:
         logger.warning("[StoresSearch] AI timed out")
     except Exception as e:
         logger.warning(f"[StoresSearch] AI error: {e}")
 
-    logger.warning("[StoresSearch] Using rotated fallback")
-    return random.choice(FALLBACK_STORES_POOLS)
+    logger.warning("[StoresSearch] Using validated fallback pool")
+    return await _get_validated_fallback_stores()
+
+
+async def _get_validated_fallback_stores() -> list[dict]:
+    """Pick a fallback pool and validate each brand's site accessibility."""
+    pool = random.choice(FALLBACK_STORES_POOLS)
+
+    # Validate in parallel
+    tasks = [validate_store_site(item.get("link", "")) for item in pool]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    validated = []
+    for item, result in zip(pool, results):
+        if isinstance(result, Exception):
+            item["parse_status"] = "❌ Ошибка проверки"
+            continue
+        accessible = result.get("accessible", False)
+        platform = result.get("platform", "unknown")
+        pcount = result.get("product_count", 0)
+        item["platform_detected"] = platform
+        item["product_count"] = pcount
+        if accessible:
+            item["parse_status"] = (
+                f"✅ Каталог доступен ({pcount} товаров)"
+                if pcount > 0 else f"✅ {platform}"
+            )
+            validated.append(item)
+        else:
+            item["parse_status"] = "❌ Защищён"
+
+    if validated:
+        logger.info(f"[FallbackStores] {len(validated)}/{len(pool)} accessible")
+        return validated[:8]
+
+    # If none accessible, return all with status
+    logger.warning(f"[FallbackStores] 0/{len(pool)} accessible, returning all with status")
+    return pool[:8]
 
 
 async def search_companies_deep() -> list[dict]:
@@ -1245,28 +1490,37 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_STORES = """You are a European fashion trend expert who finds brands BEFORE they go mainstream. List the TOP 8 most trendy, VIRAL, FASTEST-GROWING fashion brands globally (2025-2026 era).
+PROMPT_STORES = """You are a DTC fashion analyst who tracks young Shopify/WooCommerce brands going viral on TikTok and Instagram.
 
-CRITICAL: These must be NICHE, EMERGING, VIRAL brands — NOT established mainstream labels.
-Think: TikTok viral brands, DTC startups, Instagram-famous indie labels, emerging designers.
+CRITICAL REQUIREMENTS — EVERY brand must meet ALL of these:
+1. Website built on Shopify or WooCommerce (check: the URL should end in .myshopify.com OR the site should have /products.json endpoint OR /wp-json/ endpoint)
+2. Brand founded LESS than 3 years ago (2022-2025)
+3. Going VIRAL on TikTok or Instagram right now
+4. NOT mainstream yet — niche/indie but rapidly growing
+5. Has an active online store with real products
 
-EMERGING BRAND EXAMPLES (find brands LIKE these, NOT these exact ones):
-House of Sunny, Cult Gaia, Nagnata, Diotima, Gimaguas, Sleeper, Rouje, Coperni, Nanushka,
-Reformation, Farm Rio, Aligne, Alaia, Acne Studios, MM6 Maison Margiela, Roksanda
+WHERE TO FIND THESE BRANDDS:
+- Shopify Store examples: search for young DTC fashion brands on Shopify
+- TikTok Creative Center trending fashion brands
+- Instagram fashion influencers promoting new indie brands
+- Product Hunt / Betalist fashion DTC launches
+- Look for brands like: Helsa, Live The Process, BITE Studios, House of Sunny, Rat & Boa, With Nothing Underneath, Les Girls Les Boys, Sleeper, Diotima, Nagnata
 
-STRICTLY FORBIDDEN (DO NOT include ANY of these):
-H&M, Zara, Mango, Uniqlo, Primark, C&A, Nike, Adidas, Gucci, Prada, LV, Chanel, Dior,
-GANNI, ARKET, COS, & Other Stories, A.P.C., Sezane, Veja, By Far, Samsoe Samsoe,
-Sandro, Maje, Massimo Dutti, Ralph Lauren, Tommy Hilfiger, Calvin Klein.
+STRICTLY FORBIDDEN (sites with Cloudflare protection or custom CMS, DO NOT include):
+Zara, H&M, COS, ARKET, & Other Stories, GANNI, Massimo Dutti, Mango, Uniqlo, Primark,
+Sézane, Rouje, Jacquemus, Coperni, Acne Studios, Reformation, Farm Rio, Alaia, By Far, Veja,
+Nanushka, Totême, Lemaire, Sandro, Maje, A.P.C., Samsoe, Gestuz, Cult Gaia, Rotate,
+Nike, Adidas, Gucci, Prada, LV, Chanel, Dior, Ralph Lauren, Calvin Klein, Tommy Hilfiger.
 
 For each brand provide EXACTLY these fields:
 - name: brand name
-- style: 2-3 catchy sentences about WHY this brand is viral RIGHT NOW and what makes it unique
+- style: 1-2 sentences about WHY this brand is viral RIGHT NOW (TikTok trend, influencer hype, specific viral product)
 - link: EXACT URL to the official website
 - country: country of origin
+- platform: "Shopify" or "WooCommerce" (you must be confident about this)
 
-Return ONLY a valid JSON array of exactly 8 brands, nothing else.
-Format: [{"name":"BrandName","style":"...","link":"https://www.brand.com","country":"Country"}]"""
+Return ONLY a valid JSON array of exactly 10 brands (to have buffer for validation), nothing else.
+Format: [{"name":"BrandName","style":"...","link":"https://www.brand.com","country":"Country","platform":"Shopify"}]"""
 
 PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream.
 
@@ -1779,253 +2033,202 @@ TECHNICAL REQUIREMENTS:
 FALLBACK_STORES: list[dict] = []  # Kept for compat; use FALLBACK_STORES_POOLS instead
 
 FALLBACK_STORES_POOLS: list[list[dict]] = [
-    # ── Pool 1: Scandinavian & Parisian chic ──
-    [
-        {
-            "name": "GANNI",
-            "style": (
-                "Danish sustainable fashion с яркими цветами и игривыми принтами. "
-                "Баллонные рукава и дерзкая графика — фишка бренда. Превратили "
-                "устойчивость в самую модную вещь на подиуме."
-            ),
-            "link": "https://www.ganni.com",
-            "country": "Denmark",
-        },
-        {
-            "name": "Sézane",
-            "style": (
-                "Парижский шик с винтажным кроем и культовым Instagram. "
-                "Каждая коллекция — любовное письмо Парижу 1970-х, "
-                "переосмысленный для современной женщины."
-            ),
-            "link": "https://www.sezane.com",
-            "country": "France",
-        },
-        {
-            "name": "Rouje",
-            "style": (
-                "Бренд Жанны Дамас — квинтэссенция французского girl-next-door стиля. "
-                "Платья-комбинации, кроп-топы и винтажный деним. "
-                "Сериал Emily in Paris сделал бренд мировым хитом."
-            ),
-            "link": "https://www.rouje.com",
-            "country": "France",
-        },
-        {
-            "name": "Rotate",
-            "style": (
-                "Копенгагенский бренд вечерних платьев с туфлями-биноклями. "
-                "Их бирюзовые платья — вирусный хит TikTok. "
-                "Носят Белла Хадид и Кендалл Дженнер."
-            ),
-            "link": "https://rotate.eu",
-            "country": "Denmark",
-        },
-        {
-            "name": "Totême",
-            "style": (
-                "Шведский quiet luxury — минимализм с характером. "
-                "Капсульный гардероб для женщин, которые ценят качество над трендами. "
-                "Слайн Берггрен (экс-политика H&M) основала бренд в Стокгольме."
-            ),
-            "link": "https://www.toteme-studio.com",
-            "country": "Sweden",
-        },
-        {
-            "name": "Lemaire",
-            "style": (
-                "Французский кутюрный минимализм Кристофа Лемера. "
-                "Кожаные сумки Croissant стали культовым аксессуаром 2025. "
-                "Эстетика «тихой роскоши» в чистом виде."
-            ),
-            "link": "https://www.lemaire.fr",
-            "country": "France",
-        },
-        {
-            "name": "Sleeper",
-            "style": (
-                "Украинский бренд одёжки-как-дневной. Пижамные костюмы и "
-                "шелковые платья для улицы. Носит Зендаи и "
-                "Бейонсе. $100M+ revenue в 2024."
-            ),
-            "link": "https://sleeper.com.ua",
-            "country": "Ukraine",
-        },
-        {
-            "name": "Cult Gaia",
-            "style": (
-                "Лос-анджелесский бренд архитектурных аксессуаров. "
-                "Их плетёные сумки Ark — самый фотографировалий аксессуар года. "
-                "Обувь и декор с ар-деко эстетикой."
-            ),
-            "link": "https://www.cultgaia.com",
-            "country": "USA",
-        },
-    ],
-    # ── Pool 2: Emerging streetwear & sustainability ──
+    # ── Pool 1: Young Shopify/WooCommerce DTC brands ──
     [
         {
             "name": "House of Sunny",
             "style": (
-                "Лондонский бренд вирусных платьев. Их сарафан Hattie — "
-                "#1 на TikTok в 2025. Яркие принты, 70-е эстетика, "
-                "accessible luxury для Gen Z."
+                "Лондонский бренд вирусных платьев — сарафан Hattie стал #1 "
+                "на TikTok в 2025. Яркие принты, 70-е эстетика, accessible luxury для Gen Z."
             ),
             "link": "https://www.houseofsunny.co.uk",
             "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Farm Rio",
+            "name": "Sleeper",
             "style": (
-                "Бразильский бренд с яркими принтами и устойчивым производством. "
-                "Растёт 60% YoY, открывает магазины по всему миру. "
-                "Эстетика карнавала + eco-conscious."
+                "Украинский бренд одёжки-как-уличной. Пижамные костюмы и "
+                "шёлковые платья носят Зендай и Бейонсе. $100M+ revenue."
             ),
-            "link": "https://www.farmrio.com",
-            "country": "Brazil",
+            "link": "https://sleeper.com.ua",
+            "country": "Ukraine",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Reformation",
+            "name": "Rat & Boa",
             "style": (
-                "Лос-анджелесский бренд sustainable fashion. "
-                "Отслеживает углеродный след каждого изделия. "
-                "Культизация через Instagram — Waitlist на дропы за часы."
+                "Курортная одежда с вирусным хайпом у блогеров. Платья и "
+                "комбинезоны для отпуска — каждый дроп раскупается за часы."
             ),
-            "link": "https://www.thereformation.com",
+            "link": "https://ratandboa.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "BITE Studios",
+            "style": (
+                "Стокгольмский sustainable fashion — минимализм из переработанных "
+                "материалов. Фаворит скандинавских fashion-инфлюенсеров."
+            ),
+            "link": "https://bitestudios.com",
+            "country": "Sweden",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
+        },
+        {
+            "name": "Live The Process",
+            "style": (
+                "Спортивный luxury из Лос-Анджелеса. Йога и пилатес одежда "
+                "премиум-класса — вирусна в Instagram-сообществах wellness."
+            ),
+            "link": "https://livetheprocess.com",
             "country": "USA",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Nagnata",
+            "name": "With Nothing Underneath",
             "style": (
-                "Австралийский бренд knitwear из переработанного хлопка. "
-                "Технологичная трикотажная одежда с архитектурным кроем. "
-                "Любимцы Vogues Australia и Net-a-Porter."
+                "Британский бренд рубашек — растёт дико. Минималистичные "
+                "рубашки идеального кроя для men и women. Хайп у стилистов."
             ),
-            "link": "https://www.nagnata.com",
-            "country": "Australia",
+            "link": "https://withnothingunderneath.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Gimaguas",
+            "name": "Les Girls Les Boys",
             "style": (
-                "Испанский boho-chic бренд сестёр Сая и Пилар. "
-                "Вязаные кардиганы, шарфы и шорты с фриволитетом. "
-                "Вирусный хит среди fashion-инфлюенсеров."
+                "Бельё и уличная одежда — основан создательницей Intimissimi. "
+                "Shopify-бренд с культовым Instagram и вирусными дропами."
             ),
-            "link": "https://www.gimaguas.com",
-            "country": "Spain",
+            "link": "https://lesgirlslesboys.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
             "name": "Diotima",
             "style": (
                 "Ямайский luxury-бренд с афро-карибской эстетикой. "
-                "Ручная работа, ткани из Ямайки. Фаворит Vogue и "
-                "нашла путь на Met Gala 2024."
+                "Ручная работа, фаворит Vogue, путь на Met Gala 2024."
             ),
             "link": "https://www.diotima.co",
             "country": "Jamaica",
-        },
-        {
-            "name": "Alaïa",
-            "style": (
-                "Тунисский кутюрный дом — кружевное мастерство уровня "
-                "скульптуры. После ребрендинга под Pieter Mulier бренд "
-                "переживает ренессанс с хайпом на Tiber sandals."
-            ),
-            "link": "https://www.alaia.com",
-            "country": "Tunisia/France",
-        },
-        {
-            "name": "Jacquemus",
-            "style": (
-                "Марсельский бренд Симона Порт Жакмюса. Le Chiquito — "
-                "самая популярная мини-сумка мира. Провёл шоу на "
-                "помостах Версальского дворца."
-            ),
-            "link": "https://www.jacquemus.com",
-            "country": "France",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
     ],
-    # ── Pool 3: European indie & niche ──
+    # ── Pool 2: More young Shopify DTC brands ──
     [
         {
-            "name": "COS",
+            "name": "Nagnata",
             "style": (
-                "Премиальный минимализм H&M Group с архитектурными силуэтами. "
-                "Каждая вещь — как скульптура из современного музея. "
-                "Коллаборация с Serpentine Gallery."
+                "Австралийский knitwear из переработанного хлопка. "
+                "Архитектурный трикотаж — любимцы Vogue Australia и Net-a-Porter."
             ),
-            "link": "https://www.cos.com",
-            "country": "Sweden",
+            "link": "https://www.nagnata.com",
+            "country": "Australia",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "A.P.C.",
+            "name": "Gimaguas",
             "style": (
-                "Французский casual-luxury с культовым raw denim с 1987. "
-                "Бренд, который носят fashion-инсайдеры, когда хотят "
-                "эффектного без усилий стиля."
+                "Испанский boho-chic сестёр Сая и Пилар. Вязаные кардиганы "
+                "и шорты с фриволите — вирусный хит среди fashion-инфлюенсеров."
             ),
-            "link": "https://www.apc.fr",
-            "country": "France",
+            "link": "https://www.gimaguas.com",
+            "country": "Spain",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Sandqvist",
+            "name": "Cult Gaia",
             "style": (
-                "Шведский бренд рюкзаков и аксессуаров из органического "
-                "хлопка и переработанной кожи. Скандинавский "
-                "дизайн + прочность для повседневности."
+                "Лос-анджелесский бренд архитектурных аксессуаров. "
+                "Плетёные сумки Ark — самый фотографируемый аксессуар года."
             ),
-            "link": "https://www.sandqvist.com",
-            "country": "Sweden",
+            "link": "https://www.cultgaia.com",
+            "country": "USA",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Gestuz",
+            "name": "Helsa",
             "style": (
-                "Датский бренд с расслабленным скандинавским стилем. "
-                "Их джинсовые комбинезоны и велюровые платья — "
-                "must-have для скандинавских fashion-блогеров."
+                "Скандинавский минимализм с хайпом в TikTok. Чистые линии, "
+                "натуральные ткани — эстетика «тихой роскоши» для Gen Z."
             ),
-            "link": "https://www.gestuz.com",
+            "link": "https://helsa.com",
             "country": "Denmark",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Coperni",
+            "name": "Aligne",
             "style": (
-                "Парижский tech-fashion лейбл. Нанесение жидкого платья "
-                "на Беллу Хадид прямо на шоу. Swipe Bag — "
-                "самый инновационный аксессуар 2025."
+                "Молодой британский бренд с идеальной посадкой. Брюки и "
+                "блейзеры с вирусной репутацией в TikTok #AligneStyle."
             ),
-            "link": "https://www.coperni.fr",
-            "country": "France",
+            "link": "https://aligne.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Nanushka",
+            "name": "Pangaia",
             "style": (
-                "Будапештский бренд с болгарскими корнями. Velvet-платья "
-                "и faux fur — вирусные хиты. Культ в Net-a-Porter "
-                "и открывает флагманы в Лондоне и Лос-Анджелесе."
+                "London-based materials science бренд. Биотехнологичные "
+                "ткани из seaweed и flowers. Культовый Instagram, $100M+ revenue."
             ),
-            "link": "https://www.nanushka.com",
-            "country": "Hungary",
+            "link": "https://pangaia.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "By Far",
+            "name": "Kowtow",
             "style": (
-                "Болгарский accessories-бренд с 90-ми. Обувь и сумки "
-                "которые ломают интернет каждый дроп. Сумка Jodie — "
-                "самый фотографируемый аксессуар года."
+                "Новозеландский sustainable бренд — органический хлопок и "
+                "честная торговля. Минималистичный дизайн с характером."
             ),
-            "link": "https://www.byfar.com",
-            "country": "Bulgaria",
+            "link": "https://kowtowclothing.com",
+            "country": "New Zealand",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
         {
-            "name": "Veja",
+            "name": "Maryam Nassir",
             "style": (
-                "Устойчивые кроссовки из Бразилии с прозрачной цепочкой. "
-                "Носит Meghan Markle и Emma Watson — эко-френдли "
-                "как самый модный выбор."
+                "Лондонский brand с Ближним Востоком эстетикой. "
+                "Вязаные платья и абayas с современным подходом — растёт в TikTok."
             ),
-            "link": "https://www.veja-store.com",
-            "country": "France/Brazil",
+            "link": "https://maryamnassir.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "✅ Shopify",
+            "product_count": 0,
         },
     ],
 ]
@@ -3708,6 +3911,17 @@ def build_item_message(item: dict, emoji: str, category: str = "") -> str:
     text = f"{emoji} *{name}*\n\n"
     if desc:
         text += f"{desc}\n\n"
+    # For stores: show platform + parse status
+    if category == "stores":
+        platform = item.get("platform_detected", "")
+        parse_status = item.get("parse_status", "")
+        if platform and parse_status:
+            text += f"🛒 {parse_status}"
+            if platform not in parse_status:
+                text += f" · {platform}"
+            text += "\n"
+        elif parse_status:
+            text += f"🛒 {parse_status}\n"
     if extra:
         text += f"📍 {extra}\n"
     if link:
