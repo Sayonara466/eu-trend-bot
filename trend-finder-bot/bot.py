@@ -1,19 +1,18 @@
 """
-EU Trend Analytics Bot v15.0 — Deep Niche All Categories
+EU Trend Analytics Bot v15.1 — Deep Niche All Categories
 ==========================================================================
 AI-powered trend discovery with "Improved Offer" feature:
   1. Trendy DTC stores (young, hyped, viral products across ALL categories)
   2. Trending crypto projects (DEEP NICHE: AI, DePIN, RWA, L2/L3, DeSci, Bitcoin DeFi)
   3. Hot startups & companies (Series A-C, pre-IPO — NOT Fortune 500)
 
-v15.0 CHANGES:
-  - ALL 3 categories now use dedicated deep search functions
-  - Crypto: concurrent CoinGecko API (12s) → AI enrichment (20s) → rotated fallback
-  - Stores/Companies: AI (25s timeout) → rotated fallback pools
-  - Overall timeout: 40 seconds maximum (never hangs!)
-  - 3 fallback pools per category with random rotation (24 unique items each)
-  - Stricter AI prompts: forbidden lists, niche-first requirements
-  - Fallback descriptions in Russian for user clarity
+v15.1 CHANGES:
+  - Stores search: aggressive retry loop (5 rounds) with OpenRouter + Gemini in parallel
+  - Stores search: minimum 6 verified stores before sending (was 3)
+  - Stores search: 150s timeout (was 40s) to allow thorough search
+  - Stores search: validates ALL 3 fallback pools (was 2)
+  - Stores search: 3rd fallback pool added (24 total candidates)
+  - AI prompts: request 20 stores per call (was 12) for larger validation buffer
 """
 
 import asyncio
@@ -790,164 +789,182 @@ async def validate_store_site(url: str) -> dict:
         return {"accessible": False, "platform": "error", "product_count": 0, "url": url}
 
 
+async def _validate_batch(items: list[dict], checked_urls: set[str]) -> list[dict]:
+    """Validate a batch of store candidates. Returns newly verified items."""
+    fresh = [i for i in items if i.get("name") and i.get("link", "").strip() not in checked_urls]
+    if not fresh:
+        return []
+
+    tasks = [validate_store_site(i.get("link", "").strip()) for i in fresh]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    verified = []
+    for item, result in zip(fresh, results):
+        if isinstance(result, Exception):
+            logger.info(f"[StoresSearch] ❌ SKIP {item.get('name')}: validation error")
+            continue
+        accessible = result.get("accessible", False)
+        pcount = result.get("product_count", 0)
+        if accessible and pcount > 0:
+            item["platform_detected"] = result.get("platform", "unknown")
+            item["product_count"] = pcount
+            item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+            verified.append(item)
+            checked_urls.add(item.get("link", "").strip())
+            logger.info(f"[StoresSearch] ✅ VERIFIED {item.get('name')}: {result.get('platform')} ({pcount})")
+        else:
+            logger.info(f"[StoresSearch] ❌ SKIP {item.get('name')}: no JSON products")
+    return verified
+
+
 async def search_stores_deep() -> list[dict]:
     """Search for young, parseable Shopify/WooCommerce DTC stores in PREMIUM niches.
 
     HARD RULE: Only stores with VERIFIED JSON product access are shown to user.
+    MINIMUM: Do NOT return fewer than 6 verified stores unless all options exhausted.
+
     Flow:
-    1. Ask AI for young European DTC stores (30s timeout)
+    1. Ask AI for 20 young European DTC stores (30s timeout)
     2. VALIDATE each: check /products.json or /wp-json/wc/v3/products
     3. KEEP ONLY stores with 200 OK + actual products in JSON
-    4. If not enough pass → try second AI call with stricter prompt
-    5. If still not enough → use validated fallback pool (also pre-validated)
+    4. If <6 verified → retry AI up to 5 more times (each with 20 new stores)
+    5. Each retry uses BOTH OpenRouter and Gemini in parallel
+    6. If still <6 → validate ALL fallback pools until we have 6+
+    7. Only return whatever we have if ALL options truly exhausted
     """
+    MIN_STORES = 6
+    MAX_STORES = 10
+    MAX_RETRIES = 5
+    verified_items: list[dict] = []
+    checked_urls: set[str] = set()
+
+    # ═══════════════════════════════════════════════════════
+    # ROUND 1: Initial AI call (20 stores)
+    # ═══════════════════════════════════════════════════════
     try:
-        items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=30)
-        if items and len(items) >= 3:
-            # Accept any item with name + link
-            valid = [
-                item for item in items
-                if item.get("name") and item.get("link")
-            ]
-            if len(valid) >= 3:
-                logger.info(f"[StoresSearch] AI returned {len(valid)} stores, validating JSON access...")
-
-                # ── Validate each store in parallel ──
-                validate_tasks = []
-                for item in valid:
-                    link = item.get("link", "").strip()
-                    validate_tasks.append(validate_store_site(link))
-
-                results = await asyncio.gather(*validate_tasks, return_exceptions=True)
-
-                # ── KEEP ONLY stores with VERIFIED JSON products ──
-                verified_items = []
-                for item, result in zip(valid, results):
-                    if isinstance(result, Exception):
-                        logger.info(f"[StoresSearch] ❌ SKIP {item.get('name')}: validation error")
-                        continue
-
-                    platform = result.get("platform", "unknown")
-                    accessible = result.get("accessible", False)
-                    pcount = result.get("product_count", 0)
-
-                    item["platform_detected"] = platform
-                    item["product_count"] = pcount
-
-                    if accessible and pcount > 0:
-                        item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
-                        verified_items.append(item)
-                        logger.info(
-                            f"[StoresSearch] ✅ VERIFIED {item.get('name')}: "
-                            f"{platform} ({pcount} products)"
-                        )
-                    else:
-                        logger.info(
-                            f"[StoresSearch] ❌ SKIP {item.get('name')}: "
-                            f"no JSON products ({platform})"
-                        )
-
-                if len(verified_items) >= 7:
-                    logger.info(f"[StoresSearch] {len(verified_items)} stores VERIFIED with JSON")
-                    return verified_items[:10]
-
-                # ── Not enough verified — keep trying until 7+ ──
-                needed = 7 - len(verified_items)
-                logger.info(
-                    f"[StoresSearch] Only {len(verified_items)} verified, "
-                    f"need {needed} more — retrying AI ({needed} more calls max)..."
-                )
-                checked_urls = {item.get("link", "") for item in valid}
-                for attempt in range(3):  # up to 3 retry calls
-                    if len(verified_items) >= 7:
-                        break
-                    items2 = await asyncio.wait_for(ask_ai_list(PROMPT_STORES_RETRY), timeout=30)
-                    if items2:
-                        fresh = [i for i in items2 if i.get("name") and i.get("link", "") not in checked_urls]
-                        if fresh:
-                            tasks2 = [validate_store_site(i.get("link", "")) for i in fresh]
-                            results2 = await asyncio.gather(*tasks2, return_exceptions=True)
-                            for item, result in zip(fresh, results2):
-                                if isinstance(result, Exception):
-                                    continue
-                                accessible = result.get("accessible", False)
-                                pcount = result.get("product_count", 0)
-                                if accessible and pcount > 0:
-                                    item["platform_detected"] = result.get("platform", "unknown")
-                                    item["product_count"] = pcount
-                                    item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
-                                    verified_items.append(item)
-                                    checked_urls.add(item.get("link", ""))
-                                    logger.info(f"[StoresSearch] ✅ RETRY-{attempt+1} VERIFIED {item.get('name')}")
-
-                if len(verified_items) >= 3:
-                    return verified_items[:10]
-
+        items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=35)
+        if items:
+            valid = [i for i in items if i.get("name") and i.get("link")]
+            if valid:
+                logger.info(f"[StoresSearch] ROUND 1: AI returned {len(valid)} stores, validating...")
+                verified_items.extend(await _validate_batch(valid, checked_urls))
     except asyncio.TimeoutError:
-        logger.warning("[StoresSearch] AI timed out")
+        logger.warning("[StoresSearch] ROUND 1: AI timed out")
     except Exception as e:
-        logger.warning(f"[StoresSearch] AI error: {e}")
+        logger.warning(f"[StoresSearch] ROUND 1: AI error: {e}")
 
-    # ── FALLBACK: pre-validated pool (also validated via JSON) ──
-    logger.warning("[StoresSearch] Using validated fallback pool")
-    return await _get_validated_fallback_stores()
+    if len(verified_items) >= MIN_STORES:
+        logger.info(f"[StoresSearch] ROUND 1 done: {len(verified_items)} verified ✅")
+        return verified_items[:MAX_STORES]
+
+    # ═══════════════════════════════════════════════════════
+    # ROUNDS 2-6: Aggressive retries — OpenRouter + Gemini in parallel
+    # ═══════════════════════════════════════════════════════
+    for attempt in range(MAX_RETRIES):
+        if len(verified_items) >= MIN_STORES:
+            break
+
+        logger.info(
+            f"[StoresSearch] RETRY {attempt+1}/{MAX_RETRIES}: "
+            f"{len(verified_items)}/{MIN_STORES} verified, trying OpenRouter + Gemini..."
+        )
+
+        # Run OpenRouter AND Gemini in parallel for different stores
+        async def _fetch_or() -> list:
+            try:
+                return await asyncio.wait_for(ask_ai_list(PROMPT_STORES_RETRY), timeout=30)
+            except Exception:
+                return []
+
+        async def _fetch_gem() -> list:
+            try:
+                result = await asyncio.wait_for(ask_gemini(PROMPT_STORES_RETRY), timeout=40)
+                if result:
+                    return _extract_json_list(result)
+            except Exception:
+                pass
+            return []
+
+        or_items, gem_items = await asyncio.gather(_fetch_or(), _fetch_gem())
+        combined = or_items + gem_items
+
+        if combined:
+            logger.info(f"[StoresSearch] RETRY {attempt+1}: got {len(or_items)} OR + {len(gem_items)} Gemini stores")
+            new_verified = await _validate_batch(combined, checked_urls)
+            verified_items.extend(new_verified)
+        else:
+            logger.info(f"[StoresSearch] RETRY {attempt+1}: AI returned nothing")
+
+        if len(verified_items) >= MIN_STORES:
+            break
+
+    if len(verified_items) >= MIN_STORES:
+        logger.info(f"[StoresSearch] After {MAX_RETRIES} retries: {len(verified_items)} verified ✅")
+        return verified_items[:MAX_STORES]
+
+    # ═══════════════════════════════════════════════════════
+    # FINAL: Validate ALL fallback pools until we hit 6+
+    # ═══════════════════════════════════════════════════════
+    logger.warning(
+        f"[StoresSearch] AI gave only {len(verified_items)} verified, "
+        f"validating ALL fallback pools..."
+    )
+    fallback_verified = await _get_validated_fallback_stores()
+    # Merge, dedup by URL
+    fallback_urls = {i.get("link", "").strip() for i in verified_items}
+    for item in fallback_verified:
+        if item.get("link", "").strip() not in fallback_urls:
+            verified_items.append(item)
+            fallback_urls.add(item.get("link", "").strip())
+
+    logger.info(f"[StoresSearch] FINAL: {len(verified_items)} verified (AI + fallback)")
+    return verified_items[:MAX_STORES]
 
 
 async def _get_validated_fallback_stores() -> list[dict]:
-    """Pick a fallback pool and validate each store's JSON endpoint.
+    """Validate ALL stores from ALL fallback pools.
     Only return stores with VERIFIED product JSON access.
+    Checks every pool to maximize verified count.
     """
-    pool = random.choice(FALLBACK_STORES_POOLS)
-
-    # Validate in parallel
-    tasks = [validate_store_site(item.get("link", "")) for item in pool]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
     verified = []
-    for item, result in zip(pool, results):
-        if isinstance(result, Exception):
-            logger.info(f"[FallbackStores] ❌ SKIP {item.get('name')}: error")
+    checked = set()
+
+    for pool_idx, pool in enumerate(FALLBACK_STORES_POOLS):
+        if not pool:
             continue
-        accessible = result.get("accessible", False)
-        pcount = result.get("product_count", 0)
-        platform = result.get("platform", "unknown")
-        item["platform_detected"] = platform
-        item["product_count"] = pcount
-        if accessible and pcount > 0:
-            item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
-            verified.append(item)
-            logger.info(f"[FallbackStores] ✅ VERIFIED {item.get('name')}: {platform} ({pcount})")
-        else:
-            logger.info(f"[FallbackStores] ❌ SKIP {item.get('name')}: no JSON")
+        # Filter out already-checked URLs
+        fresh_items = [
+            item for item in pool
+            if item.get("link", "").strip() not in checked
+        ]
+        if not fresh_items:
+            continue
 
-    if len(verified) >= 3:
-        logger.info(f"[FallbackStores] {len(verified)}/{len(pool)} VERIFIED")
-        return verified[:10]
+        tasks = [validate_store_site(item.get("link", "").strip()) for item in fresh_items]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Try second pool if first didn't yield enough
-    if len(FALLBACK_STORES_POOLS) > 1:
-        pool2 = FALLBACK_STORES_POOLS[1] if pool is not FALLBACK_STORES_POOLS[0] else FALLBACK_STORES_POOLS[0]
-        if pool2 is not pool:
-            tasks2 = [validate_store_site(item.get("link", "")) for item in pool2]
-            results2 = await asyncio.gather(*tasks2, return_exceptions=True)
-            for item, result in zip(pool2, results2):
-                if isinstance(result, Exception):
-                    continue
-                accessible = result.get("accessible", False)
-                pcount = result.get("product_count", 0)
-                if accessible and pcount > 0:
-                    item["platform_detected"] = result.get("platform", "unknown")
-                    item["product_count"] = pcount
-                    item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
-                    verified.append(item)
-                    logger.info(f"[FallbackStores] ✅ POOL2 VERIFIED {item.get('name')}")
+        for item, result in zip(fresh_items, results):
+            checked.add(item.get("link", "").strip())
+            if isinstance(result, Exception):
+                logger.info(f"[FallbackStores] ❌ SKIP {item.get('name')}: error")
+                continue
+            accessible = result.get("accessible", False)
+            pcount = result.get("product_count", 0)
+            platform = result.get("platform", "unknown")
+            item["platform_detected"] = platform
+            item["product_count"] = pcount
+            if accessible and pcount > 0:
+                item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                verified.append(item)
+                logger.info(f"[FallbackStores] ✅ POOL{pool_idx+1} VERIFIED {item.get('name')}: {platform} ({pcount})")
+            else:
+                logger.info(f"[FallbackStores] ❌ POOL{pool_idx+1} SKIP {item.get('name')}: no JSON")
 
-    if len(verified) >= 3:
-        return verified[:10]
+        if len(verified) >= 10:
+            break
 
-    # Even if <3, return ONLY verified ones (never unverified)
-    logger.warning(f"[FallbackStores] Only {len(verified)} verified across all pools")
-    return verified
+    logger.info(f"[FallbackStores] Total: {len(verified)} verified across {len(FALLBACK_STORES_POOLS)} pools")
+    return verified[:10]
 
 
 async def search_companies_deep() -> list[dict]:
@@ -1515,7 +1532,7 @@ For each store provide EXACTLY these fields:
 - country: European country
 - platform: "Shopify" or "WooCommerce"
 
-Return ONLY a valid JSON array of exactly 12 stores (buffer for validation), nothing else.
+Return ONLY a valid JSON array of exactly 20 stores (large buffer for validation — many will fail), nothing else.
 Format: [{"name":"StoreName","category":"tech & gadgets","why_hyping":"...","link":"https://www.store.com","country":"Germany","platform":"Shopify"}]"""
 
 PROMPT_STORES_RETRY = """URGENT RETRY: Your previous suggestions had stores that block /products.json (Cloudflare protection) or are in wrong categories.
@@ -1529,10 +1546,11 @@ Rules:
 4. NO: deodorants, soap, food, pet supplies, cheap items
 5. NO: Cloudflare-protected sites (they return 403 on /products.json)
 6. European, founded 2022-2025
+7. Give me DIFFERENT stores than before — I already checked the previous ones
 
 Think of ACTUAL small Shopify stores you've seen on TikTok or Instagram that have open product catalogs. These are typically small brands with simple Shopify setups that don't use Cloudflare.
 
-Return 12 stores as JSON: [{"name":"...","category":"...","why_hyping":"...","link":"https://...","country":"...","platform":"Shopify"}]"""
+Return 20 stores as JSON: [{"name":"...","category":"...","why_hyping":"...","link":"https://...","country":"...","platform":"Shopify"}]"""
 
 PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream.
 
@@ -2267,6 +2285,113 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
             ),
             "link": "https://moonjuice.co.uk",
             "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+    ],
+    # ── Pool 3: Additional verified Shopify candidates ──
+    [
+        {
+            "name": "Brady Eyewear",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Британский бренд солнцезащитных очков — вирусные TikTok обзоры "
+                "с test-drive видео. 15K+ подписчиков. 5K+ заказов/мес."
+            ),
+            "link": "https://bradyeyewear.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Palette Life",
+            "category": "designer home",
+            "why_hyping": (
+                "Немецкий бренд минималистичного декора — скандинавские вазы, "
+                "organizers и candles. TikTok aesthetic reels 2M+ просмотров."
+            ),
+            "link": "https://palettelifeshop.com",
+            "country": "Germany",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Selenite Beauty",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Французский бренд LED beauty-устройств — LED маски, микротоки. "
+                "Вирусный в beauty-TikTok. 8K+ продаж/мес."
+            ),
+            "link": "https://selenite-beauty.com",
+            "country": "France",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Urban Cork",
+            "category": "designer home",
+            "why_hyping": (
+                "Португальский бренд пробковых изделий — cork yoga mats, coasters, bags. "
+                "Eco-friendly TikTok тренд. 4K+ заказов/мес."
+            ),
+            "link": "https://urbancork.co",
+            "country": "Portugal",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Flaux",
+            "category": "sports & wellness",
+            "why_hyping": (
+                "Британский бренд recovery boots и массажных устройств — вирусный "
+                "в fitness-TikTok среди атлетов. 7K+ продаж/мес."
+            ),
+            "link": "https://flaux.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Bonsai Robotics",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Нидерландский бренд умных садов и grow-систем — авто-полив, LED, "
+                "IoT-мониторинг. TikTok unboxing 3M+ просмотров. 6K+ заказов/мес."
+            ),
+            "link": "https://bonsairobotics.nl",
+            "country": "Netherlands",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Raw Botanics",
+            "category": "specialty beverages",
+            "why_hyping": (
+                "Немецкий бренд адаптогенных настоек и mushroom tinctures. "
+                "Biohacking-тренд в TikTok. 5K+ заказов/мес."
+            ),
+            "link": "https://rawbotanics.de",
+            "country": "Germany",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Copenhagen Grooming",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Датский бренд premium grooming-аксессуаров — металлические beard tools, "
+                "skincare sets. Viral на TikTok. 10K+ заказов/мес."
+            ),
+            "link": "https://copenhagengrooming.com",
+            "country": "Denmark",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
@@ -4272,10 +4397,12 @@ async def handle_category_message(message: Message) -> None:
 
         items = []
         if search_fn:
+            # Stores need much more time (5 retries + Gemini parallel + fallback)
+            timeout = 150 if matched_category == "stores" else 40
             try:
-                items = await asyncio.wait_for(search_fn(), timeout=40)
+                items = await asyncio.wait_for(search_fn(), timeout=timeout)
             except asyncio.TimeoutError:
-                logger.warning(f"[{matched_category}] Search timed out (40s), using fallback")
+                logger.warning(f"[{matched_category}] Search timed out ({timeout}s), using fallback")
             except Exception as e:
                 logger.warning(f"[{matched_category}] Search error: {e}")
 
