@@ -2,7 +2,7 @@
 EU Trend Analytics Bot v15.0 — Deep Niche All Categories
 ==========================================================================
 AI-powered trend discovery with "Improved Offer" feature:
-  1. Trendy fashion brands (niche, viral, emerging — NOT mainstream)
+  1. Trendy DTC stores (young, hyped, viral products across ALL categories)
   2. Trending crypto projects (DEEP NICHE: AI, DePIN, RWA, L2/L3, DeSci, Bitcoin DeFi)
   3. Hot startups & companies (Series A-C, pre-IPO — NOT Fortune 500)
 
@@ -710,27 +710,244 @@ Return ONLY JSON."""
     return deduped
 
 
-async def search_stores_deep() -> list[dict]:
-    """Search for trending niche European stores/brands.
+async def validate_store_site(url: str) -> dict:
+    """STRICT check: store must return 200 OK with ACTUAL products via JSON endpoint.
 
-    Strategy:
-    1. Ask AI with strict niche prompt (25s timeout)
-    2. If AI fails, use rotated fallback pools
+    Returns dict:
+      {"accessible": bool, "platform": str, "product_count": int, "url": str}
+
+    HARD RULES — a store is ONLY accessible if:
+      - Shopify: /products.json returns 200 with non-empty "products" array
+      - WooCommerce: /wp-json/wc/v3/products returns 200 with array of products
+    Everything else (HTML detection, collections page, unknown platform) = NOT accessible.
+    """
+    if not url:
+        return {"accessible": False, "platform": "unknown", "product_count": 0, "url": url}
+
+    base = url.rstrip("/")
+
+    # Normalize URL
+    if not base.startswith("http"):
+        base = "https://" + base
+
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+            }
+
+            # ── Test 1: Shopify /products.json — MUST return JSON with products ──
+            try:
+                resp = await client.get(f"{base}/products.json", headers=headers)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        products = data.get("products", [])
+                        count = len(products)
+                        if count > 0:
+                            logger.info(f"[Validate] {url}: SHOPIFY ✅ ({count} products in JSON)")
+                            return {
+                                "accessible": True,
+                                "platform": "Shopify",
+                                "product_count": count,
+                                "url": base,
+                            }
+                    except Exception:
+                        logger.info(f"[Validate] {url}: /products.json 200 but not valid JSON")
+            except Exception:
+                pass
+
+            # ── Test 2: WooCommerce /wp-json/wc/v3/products — MUST return JSON ──
+            try:
+                resp = await client.get(f"{base}/wp-json/wc/v3/products", headers=headers)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        if isinstance(data, list) and len(data) > 0:
+                            logger.info(f"[Validate] {url}: WOOCOMMERCE ✅ ({len(data)} products)")
+                            return {
+                                "accessible": True,
+                                "platform": "WooCommerce",
+                                "product_count": len(data),
+                                "url": base,
+                            }
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # ── ALL OTHER CHECKS REMOVED ──
+            # No HTML-based detection, no collections page, no "other" platform.
+            # If the site doesn't give us JSON with products, it's NOT accessible.
+
+            logger.info(f"[Validate] {url}: ❌ NO JSON products endpoint found")
+            return {"accessible": False, "platform": "blocked", "product_count": 0, "url": base}
+
+    except Exception as e:
+        logger.warning(f"[Validate] {url}: Error: {e}")
+        return {"accessible": False, "platform": "error", "product_count": 0, "url": url}
+
+
+async def search_stores_deep() -> list[dict]:
+    """Search for young, parseable Shopify/WooCommerce DTC stores in PREMIUM niches.
+
+    HARD RULE: Only stores with VERIFIED JSON product access are shown to user.
+    Flow:
+    1. Ask AI for young European DTC stores (30s timeout)
+    2. VALIDATE each: check /products.json or /wp-json/wc/v3/products
+    3. KEEP ONLY stores with 200 OK + actual products in JSON
+    4. If not enough pass → try second AI call with stricter prompt
+    5. If still not enough → use validated fallback pool (also pre-validated)
     """
     try:
-        items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=25)
+        items = await asyncio.wait_for(ask_ai_list(PROMPT_STORES), timeout=30)
         if items and len(items) >= 3:
-            valid = [item for item in items if all(item.get(k) for k in ("name", "style", "link"))]
+            # Accept any item with name + link
+            valid = [
+                item for item in items
+                if item.get("name") and item.get("link")
+            ]
             if len(valid) >= 3:
-                logger.info(f"[StoresSearch] AI returned {len(valid)} brands")
-                return valid[:8]
+                logger.info(f"[StoresSearch] AI returned {len(valid)} stores, validating JSON access...")
+
+                # ── Validate each store in parallel ──
+                validate_tasks = []
+                for item in valid:
+                    link = item.get("link", "").strip()
+                    validate_tasks.append(validate_store_site(link))
+
+                results = await asyncio.gather(*validate_tasks, return_exceptions=True)
+
+                # ── KEEP ONLY stores with VERIFIED JSON products ──
+                verified_items = []
+                for item, result in zip(valid, results):
+                    if isinstance(result, Exception):
+                        logger.info(f"[StoresSearch] ❌ SKIP {item.get('name')}: validation error")
+                        continue
+
+                    platform = result.get("platform", "unknown")
+                    accessible = result.get("accessible", False)
+                    pcount = result.get("product_count", 0)
+
+                    item["platform_detected"] = platform
+                    item["product_count"] = pcount
+
+                    if accessible and pcount > 0:
+                        item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                        verified_items.append(item)
+                        logger.info(
+                            f"[StoresSearch] ✅ VERIFIED {item.get('name')}: "
+                            f"{platform} ({pcount} products)"
+                        )
+                    else:
+                        logger.info(
+                            f"[StoresSearch] ❌ SKIP {item.get('name')}: "
+                            f"no JSON products ({platform})"
+                        )
+
+                if len(verified_items) >= 7:
+                    logger.info(f"[StoresSearch] {len(verified_items)} stores VERIFIED with JSON")
+                    return verified_items[:10]
+
+                # ── Not enough verified — keep trying until 7+ ──
+                needed = 7 - len(verified_items)
+                logger.info(
+                    f"[StoresSearch] Only {len(verified_items)} verified, "
+                    f"need {needed} more — retrying AI ({needed} more calls max)..."
+                )
+                checked_urls = {item.get("link", "") for item in valid}
+                for attempt in range(3):  # up to 3 retry calls
+                    if len(verified_items) >= 7:
+                        break
+                    items2 = await asyncio.wait_for(ask_ai_list(PROMPT_STORES_RETRY), timeout=30)
+                    if items2:
+                        fresh = [i for i in items2 if i.get("name") and i.get("link", "") not in checked_urls]
+                        if fresh:
+                            tasks2 = [validate_store_site(i.get("link", "")) for i in fresh]
+                            results2 = await asyncio.gather(*tasks2, return_exceptions=True)
+                            for item, result in zip(fresh, results2):
+                                if isinstance(result, Exception):
+                                    continue
+                                accessible = result.get("accessible", False)
+                                pcount = result.get("product_count", 0)
+                                if accessible and pcount > 0:
+                                    item["platform_detected"] = result.get("platform", "unknown")
+                                    item["product_count"] = pcount
+                                    item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                                    verified_items.append(item)
+                                    checked_urls.add(item.get("link", ""))
+                                    logger.info(f"[StoresSearch] ✅ RETRY-{attempt+1} VERIFIED {item.get('name')}")
+
+                if len(verified_items) >= 3:
+                    return verified_items[:10]
+
     except asyncio.TimeoutError:
         logger.warning("[StoresSearch] AI timed out")
     except Exception as e:
         logger.warning(f"[StoresSearch] AI error: {e}")
 
-    logger.warning("[StoresSearch] Using rotated fallback")
-    return random.choice(FALLBACK_STORES_POOLS)
+    # ── FALLBACK: pre-validated pool (also validated via JSON) ──
+    logger.warning("[StoresSearch] Using validated fallback pool")
+    return await _get_validated_fallback_stores()
+
+
+async def _get_validated_fallback_stores() -> list[dict]:
+    """Pick a fallback pool and validate each store's JSON endpoint.
+    Only return stores with VERIFIED product JSON access.
+    """
+    pool = random.choice(FALLBACK_STORES_POOLS)
+
+    # Validate in parallel
+    tasks = [validate_store_site(item.get("link", "")) for item in pool]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    verified = []
+    for item, result in zip(pool, results):
+        if isinstance(result, Exception):
+            logger.info(f"[FallbackStores] ❌ SKIP {item.get('name')}: error")
+            continue
+        accessible = result.get("accessible", False)
+        pcount = result.get("product_count", 0)
+        platform = result.get("platform", "unknown")
+        item["platform_detected"] = platform
+        item["product_count"] = pcount
+        if accessible and pcount > 0:
+            item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+            verified.append(item)
+            logger.info(f"[FallbackStores] ✅ VERIFIED {item.get('name')}: {platform} ({pcount})")
+        else:
+            logger.info(f"[FallbackStores] ❌ SKIP {item.get('name')}: no JSON")
+
+    if len(verified) >= 3:
+        logger.info(f"[FallbackStores] {len(verified)}/{len(pool)} VERIFIED")
+        return verified[:10]
+
+    # Try second pool if first didn't yield enough
+    if len(FALLBACK_STORES_POOLS) > 1:
+        pool2 = FALLBACK_STORES_POOLS[1] if pool is not FALLBACK_STORES_POOLS[0] else FALLBACK_STORES_POOLS[0]
+        if pool2 is not pool:
+            tasks2 = [validate_store_site(item.get("link", "")) for item in pool2]
+            results2 = await asyncio.gather(*tasks2, return_exceptions=True)
+            for item, result in zip(pool2, results2):
+                if isinstance(result, Exception):
+                    continue
+                accessible = result.get("accessible", False)
+                pcount = result.get("product_count", 0)
+                if accessible and pcount > 0:
+                    item["platform_detected"] = result.get("platform", "unknown")
+                    item["product_count"] = pcount
+                    item["parse_status"] = f"✅ Каталог доступен ({pcount} товаров)"
+                    verified.append(item)
+                    logger.info(f"[FallbackStores] ✅ POOL2 VERIFIED {item.get('name')}")
+
+    if len(verified) >= 3:
+        return verified[:10]
+
+    # Even if <3, return ONLY verified ones (never unverified)
+    logger.warning(f"[FallbackStores] Only {len(verified)} verified across all pools")
+    return verified
 
 
 async def search_companies_deep() -> list[dict]:
@@ -921,32 +1138,401 @@ async def analyze_original_site(url: str) -> dict:
         return {}
 
 
+async def parse_store_products(url: str, desc: str = "", name: str = "") -> list[dict]:
+    """Scrape product data from an online store.
+
+    PRIORITY ORDER (matches validate_store_site exactly):
+      1. Shopify /products.json — SAME endpoint validator confirmed works
+      2. WooCommerce /wp-json/wc/v3/products — SAME endpoint validator confirmed works
+      3. HTML fallback: JSON-LD, CSS selectors, product links (only if JSON fails)
+    """
+    if not url:
+        return []
+
+    try:
+        import json as _json
+        from urllib.parse import urljoin, urlparse
+        from bs4 import BeautifulSoup
+
+        BROWSER_HEADERS = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                      "image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
+        JSON_HEADERS = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json",
+        }
+
+        products: list[dict] = []
+        base = url.rstrip("/")
+
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+
+            # ═══════════════════════════════════════════════════════════
+            # PRIORITY 1: Shopify /products.json — SAME as validator
+            # ═══════════════════════════════════════════════════════════
+            try:
+                resp = await client.get(f"{base}/products.json", headers=JSON_HEADERS)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    shopify_products = data.get("products", [])
+                    if shopify_products:
+                        for sp in shopify_products:
+                            pname = sp.get("title", "")
+                            pimages = sp.get("images", [])
+                            img = pimages[0].get("src", "") if pimages else ""
+                            if not img:
+                                # Try featured_image in variants
+                                variants = sp.get("variants", [])
+                                if variants:
+                                    img = variants[0].get("featured_image", {}).get("src", "")
+                            pprice = ""
+                            variants = sp.get("variants", [])
+                            if variants:
+                                pprice = variants[0].get("price", "")
+                                currency = sp.get("vendor", "")
+                            # Normalize image URL
+                            if img and img.startswith("//"):
+                                img = "https:" + img
+                            elif img and img.startswith("/"):
+                                parsed = urlparse(url)
+                                img = f"{parsed.scheme}://{parsed.netloc}{img}"
+
+                            if pname:
+                                products.append({
+                                    "name": pname[:120],
+                                    "image": img[:500] if img else "",
+                                    "price": pprice[:60] if pprice else "",
+                                })
+                        if products:
+                            logger.info(
+                                f"[ParseProducts] ✅ Shopify /products.json: "
+                                f"{len(products)} products from {url}"
+                            )
+            except Exception as e:
+                logger.debug(f"[ParseProducts] /products.json failed: {e}")
+
+            # ═══════════════════════════════════════════════════════════
+            # PRIORITY 2: WooCommerce /wp-json/wc/v3/products
+            # ═══════════════════════════════════════════════════════════
+            if not products:
+                try:
+                    resp = await client.get(
+                        f"{base}/wp-json/wc/v3/products",
+                        headers=JSON_HEADERS,
+                    )
+                    if resp.status_code == 200:
+                        wc_products = resp.json()
+                        if isinstance(wc_products, list) and wc_products:
+                            for wp in wc_products:
+                                pname = wp.get("name", "")
+                                img = ""
+                                images = wp.get("images", [])
+                                if images:
+                                    img = images[0].get("src", "")
+                                pprice = wp.get("price", "")
+                                if img and img.startswith("//"):
+                                    img = "https:" + img
+                                if pname:
+                                    products.append({
+                                        "name": pname[:120],
+                                        "image": img[:500] if img else "",
+                                        "price": pprice[:60] if pprice else "",
+                                    })
+                            if products:
+                                logger.info(
+                                    f"[ParseProducts] ✅ WooCommerce JSON: "
+                                    f"{len(products)} products from {url}"
+                                )
+                except Exception as e:
+                    logger.debug(f"[ParseProducts] /wp-json/wc/v3/products failed: {e}")
+
+            # ═══════════════════════════════════════════════════════════
+            # PRIORITY 3: HTML fallback (only if JSON gave nothing)
+            # ═══════════════════════════════════════════════════════════
+            if not products:
+                paths_to_try = [
+                    base + "/shop",
+                    base + "/collections/all",
+                    base + "/en/shop",
+                    base + "/en/collections/all",
+                    base + "/shop-all",
+                    base + "/category/all",
+                    base + "/new",
+                    base + "/en/new",
+                    base + "/products",
+                ]
+                urls_to_try = [base] + paths_to_try
+
+                for try_url in urls_to_try:
+                    try:
+                        resp = await client.get(try_url, headers=BROWSER_HEADERS)
+                        if resp.status_code != 200:
+                            continue
+                        html = resp.text[:300000]
+                        soup = BeautifulSoup(html, "lxml")
+
+                        # ── Strategy A: JSON-LD Product / ItemList ──
+                        for script_tag in soup.find_all("script", type="application/ld+json"):
+                            try:
+                                data = _json.loads(script_tag.string)
+                                items = []
+                                if isinstance(data, dict):
+                                    if data.get("@type") == "ItemList":
+                                        items = data.get("itemListElement", [])
+                                    elif data.get("@graph"):
+                                        items = data.get("@graph", [])
+                                    elif data.get("@type") == "Product":
+                                        items = [data]
+                                if isinstance(data, list):
+                                    items = data
+
+                                for item in items:
+                                    p_type = item.get("@type", "")
+                                    if p_type in ("Product", "ListItem"):
+                                        prod = item.get("item", item)
+                                        if prod.get("@type") != "Product":
+                                            continue
+                                        pname = prod.get("name", "")
+                                        pimg = ""
+                                        offers = prod.get("offers", {})
+                                        if isinstance(offers, dict):
+                                            pimg = offers.get("image", "") or prod.get("image", "")
+                                            price = offers.get("price", "")
+                                            currency = offers.get("priceCurrency", "")
+                                            if price and currency:
+                                                price = f"{currency}{price}"
+                                        elif isinstance(offers, list) and offers:
+                                            pimg = offers[0].get("image", "") or prod.get("image", "")
+                                            price = offers[0].get("price", "")
+                                            currency = offers[0].get("priceCurrency", "")
+                                            if price and currency:
+                                                price = f"{currency}{price}"
+                                        else:
+                                            pimg = prod.get("image", "")
+                                            price = ""
+
+                                        if not pimg and isinstance(pimg, list):
+                                            pimg = pimg[0] if pimg else ""
+                                        if isinstance(pimg, dict):
+                                            pimg = pimg.get("url", "")
+
+                                        if pname and pimg:
+                                            if pimg.startswith("//"):
+                                                pimg = "https:" + pimg
+                                            elif pimg.startswith("/"):
+                                                pimg = f"https://{urlparse(url).netloc}{pimg}"
+                                            products.append({
+                                                "name": pname[:120],
+                                                "image": pimg[:500],
+                                                "price": str(price)[:60] if price else "",
+                                            })
+                            except Exception:
+                                continue
+
+                        if len(products) >= 4:
+                            logger.info(f"[ParseProducts] JSON-LD: {len(products)} from {try_url}")
+                            break
+
+                        # ── Strategy B: CSS product card selectors ──
+                        selectors = [
+                            "div.product-card", "div.product-item", "div.product",
+                            "li.product", "article.product",
+                            "div[class*='product-card']", "div[class*='productCard']",
+                            "div[class*='product_item']", "div[class*='item-card']",
+                            "div[class*='collection-item']", "a[class*='product']",
+                            "div[class*='card-product']",
+                        ]
+                        cards = []
+                        for sel in selectors:
+                            found = soup.select(sel)
+                            if len(found) >= 2:
+                                cards = found
+                                break
+
+                        # ── Strategy C: Product links with images ──
+                        if len(cards) < 2:
+                            for a_tag in soup.select("a[href]"):
+                                href = a_tag.get("href", "")
+                                if "/products/" in href or "/product/" in href:
+                                    parent = a_tag.parent
+                                    if parent and parent.find("img"):
+                                        cards.append(parent)
+                            cards = cards[:24]
+
+                        # ── Extract from cards ──
+                        for card in cards[:24]:
+                            try:
+                                img_tag = card.find("img")
+                                if not img_tag:
+                                    continue
+                                img_src = (
+                                    img_tag.get("src") or
+                                    img_tag.get("data-src") or
+                                    img_tag.get("data-lazy-src") or ""
+                                )
+                                if not img_src:
+                                    srcset = img_tag.get("data-srcset") or img_tag.get("srcset") or ""
+                                    if srcset:
+                                        first_src = srcset.split(",")[0].strip().split()[0]
+                                        if first_src:
+                                            img_src = first_src
+                                if not img_src or "data:" in img_src:
+                                    continue
+                                if img_src.startswith("//"):
+                                    img_src = "https:" + img_src
+                                elif img_src.startswith("/"):
+                                    parsed_base = urlparse(url)
+                                    img_src = f"{parsed_base.scheme}://{parsed_base.netloc}{img_src}"
+
+                                pname = ""
+                                h_tag = card.find(["h3", "h2", "h4", "h5"])
+                                if h_tag:
+                                    pname = h_tag.get_text(strip=True)
+                                if not pname:
+                                    a_tag = card.find("a")
+                                    if a_tag:
+                                        pname = (a_tag.get("title", "") or
+                                                 a_tag.get("aria-label", "") or
+                                                 a_tag.get_text(strip=True))
+
+                                price = ""
+                                price_tag = card.find(string=re.compile(r"[€$£₽]?\s*\d+[.,]\d{2}"))
+                                if price_tag:
+                                    price = price_tag.strip()
+                                if not price:
+                                    for cls_pat in ["price", "amount", "cost", "product-price", "money"]:
+                                        pt = card.find(class_=re.compile(cls_pat, re.I))
+                                        if pt:
+                                            price = pt.get_text(strip=True)
+                                            break
+
+                                if pname and img_src:
+                                    products.append({
+                                        "name": pname[:120],
+                                        "image": img_src[:500],
+                                        "price": price[:60] if price else "",
+                                    })
+                            except Exception:
+                                continue
+
+                        if len(products) >= 4:
+                            logger.info(f"[ParseProducts] Cards: {len(products)} from {try_url}")
+                            break
+
+                    except Exception as e:
+                        logger.debug(f"[ParseProducts] {try_url} failed: {e}")
+                        continue
+
+            # Deduplicate by image URL
+            seen: set[str] = set()
+            unique: list[dict] = []
+            for p in products:
+                if p["image"] not in seen:
+                    seen.add(p["image"])
+                    unique.append(p)
+
+            # Mark every product with source URL for verification
+            for p in unique:
+                p["source_url"] = url
+
+            logger.info(
+                f"[ParseProducts] Total {len(unique)} products from {url} "
+                f"(method: {'Shopify JSON' if unique else 'HTML'})"
+            )
+
+            return unique[:60]
+
+    except ImportError:
+        logger.warning("[ParseProducts] Required lib not installed")
+        return []
+    except Exception as e:
+        logger.warning(f"[ParseProducts] Failed for {url}: {e}")
+        return []
+
+
 # ═══════════════════════════════════════════════════════════════════
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_STORES = """You are a European fashion trend expert who finds brands BEFORE they go mainstream. List the TOP 8 most trendy, VIRAL, FASTEST-GROWING fashion brands globally (2025-2026 era).
+PROMPT_STORES = """You are a European DTC e-commerce analyst who tracks young, rapidly growing online stores selling TRENDY, HYPE products in PREMIUM niches.
 
-CRITICAL: These must be NICHE, EMERGING, VIRAL brands — NOT established mainstream labels.
-Think: TikTok viral brands, DTC startups, Instagram-famous indie labels, emerging designers.
+You are looking for online stores (single-brand shops) founded 1-4 years ago (2022-2025) that are currently VIRAL in Europe.
 
-EMERGING BRAND EXAMPLES (find brands LIKE these, NOT these exact ones):
-House of Sunny, Cult Gaia, Nagnata, Diotima, Gimaguas, Sleeper, Rouje, Coperni, Nanushka,
-Reformation, Farm Rio, Aligne, Alaia, Acne Studios, MM6 Maison Margiela, Roksanda
+ALLOWED PRODUCT CATEGORIES (PREMIUM niches only — NO deodorants, soap, basic food, toothpicks):
+  - Tech & Gadgets: smart rings, premium routers, AR/VR glasses, Apple device accessories, wireless earbuds, smart home devices, portable projectors, e-ink tablets
+  - Designer Home: Scandinavian lamps, designer chairs, concrete decor, luxury candles, premium kitchen tools, smart planters, designer wallpaper
+  - Hype Clothing & Accessories: viral sneakers, tracking pants, phone cases, crossbody bags, designer socks, streetwear drops
+  - Sports & Wellness: massage guns, smart jump ropes, premium yoga mats, recovery boots, smart water bottles, fitness trackers, neck massagers
+  - Specialty Beverages: functional mushrooms drinks, premium matcha sets, cold brew systems, adaptogenic elixirs, specialty tea kits
 
-STRICTLY FORBIDDEN (DO NOT include ANY of these):
-H&M, Zara, Mango, Uniqlo, Primark, C&A, Nike, Adidas, Gucci, Prada, LV, Chanel, Dior,
-GANNI, ARKET, COS, & Other Stories, A.P.C., Sezane, Veja, By Far, Samsoe Samsoe,
-Sandro, Maje, Massimo Dutti, Ralph Lauren, Tommy Hilfiger, Calvin Klein.
+FORBIDDEN CATEGORIES (DO NOT include stores selling these):
+  - Basic personal care (deodorant, soap, toothpaste, basic shampoo)
+  - Basic food/groceries (vegetable boxes, basic snacks, meal kits)
+  - Cheap household items (cleaning supplies, basic candles)
+  - Pet food/treats (boring, low-ticket)
+  - Stationery (too cheap)
 
-For each brand provide EXACTLY these fields:
-- name: brand name
-- style: 2-3 catchy sentences about WHY this brand is viral RIGHT NOW and what makes it unique
+CRITICAL REQUIREMENTS — EVERY store must meet ALL of these:
+1. European: EU country + UK, Switzerland, Norway
+2. Young: founded 2022-2025
+3. Currently HYPED: viral on TikTok/Instagram, sold-out products, pre-orders, rapid growth
+4. On Shopify or WooCommerce with OPEN JSON endpoint:
+   - Shopify stores MUST have /products.json that returns 200 OK with products
+   - WooCommerce stores MUST have /wp-json/wc/v3/products endpoint
+   - DO NOT suggest stores on custom platforms or behind Cloudflare (they return 403)
+5. Has 10+ products in catalog
+6. NOT a marketplace (NOT Amazon, eBay, Etsy, Zalando, About You, ASOS)
+7. NOT a major brand (NOT Apple, Samsung, IKEA, Dyson, etc.)
+
+WHERE TO FIND THESE STORES:
+- TikTok: #tiktokmademebuyit #viralfinds #europefinds #techfinds #homefinds
+- Instagram: #newbrand #discoverunder5k #europeanbrands
+- Shopify Blog success stories
+- Thingtesting, DTC Newsletter, Trends.vc
+- Product Hunt (E-commerce, Tech sections)
+
+FORBIDDEN BRANDS (DO NOT include):
+Amazon, eBay, Etsy, Zalando, About You, ASOS, Farfetch,
+Zara, H&M, COS, GANNI, Mango, Uniqlo, Rouje, Sézane,
+IKEA, Samsung, Apple, Dyson, Philips, Bosch.
+
+For each store provide EXACTLY these fields:
+- name: store/brand name
+- category: one of: "tech & gadgets", "designer home", "hype clothing", "sports & wellness", "specialty beverages"
+- why_hyping: 1 sentence WHY this store is viral RIGHT NOW (specific: TikTok views, sales growth, influencer mention)
 - link: EXACT URL to the official website
-- country: country of origin
+- country: European country
+- platform: "Shopify" or "WooCommerce"
 
-Return ONLY a valid JSON array of exactly 8 brands, nothing else.
-Format: [{"name":"BrandName","style":"...","link":"https://www.brand.com","country":"Country"}]"""
+Return ONLY a valid JSON array of exactly 12 stores (buffer for validation), nothing else.
+Format: [{"name":"StoreName","category":"tech & gadgets","why_hyping":"...","link":"https://www.store.com","country":"Germany","platform":"Shopify"}]"""
+
+PROMPT_STORES_RETRY = """URGENT RETRY: Your previous suggestions had stores that block /products.json (Cloudflare protection) or are in wrong categories.
+
+I need YOUNG European Shopify/WooCommerce stores in PREMIUM niches where /products.json ACTUALLY RETURNS 200 OK with products.
+
+Rules:
+1. Shopify store: /products.json must return JSON array with "products" key containing real products
+2. WooCommerce store: /wp-json/wc/v3/products must return JSON array of products
+3. Categories: tech & gadgets, designer home, hype clothing, sports & wellness, specialty beverages
+4. NO: deodorants, soap, food, pet supplies, cheap items
+5. NO: Cloudflare-protected sites (they return 403 on /products.json)
+6. European, founded 2022-2025
+
+Think of ACTUAL small Shopify stores you've seen on TikTok or Instagram that have open product catalogs. These are typically small brands with simple Shopify setups that don't use Cloudflare.
+
+Return 12 stores as JSON: [{"name":"...","category":"...","why_hyping":"...","link":"https://...","country":"...","platform":"Shopify"}]"""
 
 PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream.
 
@@ -1003,59 +1589,60 @@ Return ONLY a valid JSON array of exactly 8 companies, nothing else:
 # IMPROVED OFFER PROMPTS — CATEGORY-SPECIFIC
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_IMPROVE_STORES = """You are a legendary fashion tech innovator and luxury brand strategist.
+PROMPT_IMPROVE_STORES = """You are a legendary e-commerce tech innovator and DTC brand strategist.
 
-A client brings you this fashion brand:
+A client brings you this online store:
 NAME: {name}
 DESCRIPTION: {description}
 ORIGINAL LINK: {link}
-CATEGORY: Fashion Brand
+CATEGORY: Online Store
 
-Your task — create a DEEPLY ANALYZED improved fashion brand concept.
+Your task — create a DEEPLY ANALYZED improved online store concept.
 
-CRITICAL RULES FOR FASHION BRANDS:
-- The improvement must be SPECIFIC to fashion/retail — NOT generic tech buzzwords
-- Think about: AI stylist, virtual try-on, capsule wardrobe subscriptions, metaverse shopping, sustainability-tech, size-inclusive AI, AR fitting rooms, social commerce
-- The improved name must be a creative evolution (e.g., GANNI → GANNI Aura, COS → COS Atelier, Sézane → Sézane Maison, Veja → Veja ONE)
-- NEVER use "Pro", "2.0", "+" suffixes — the name must feel like a natural fashion brand extension
-- The improvement must address real fashion industry pain points: returns, sizing, sustainability, discovery
+CRITICAL RULES FOR DTC STORES:
+- The improvement must be SPECIFIC to the store's product category — NOT generic tech buzzwords
+- Analyze what category this store is in (gadgets, home decor, skincare, fitness, pet supplies, coffee, kitchen, outdoor, etc.) and tailor the innovation accordingly
+- Think about: AI-powered personalization, subscription models, AR product preview, community features, sustainability, smart packaging, loyalty/rewards, social commerce, influencer collab platform
+- The improved name must be a creative evolution (e.g., BrewDog → BrewDog Craft Lab, Bower Collective → Bower Home, FiID → FiID Motion)
+- NEVER use "Pro", "2.0", "+" suffixes — the name must feel like a natural brand extension
+- The improvement must address real e-commerce pain points: discovery, trust, returns, personalization, repeat purchases
 - Mention "{name}" by name to ensure customization
 
-EXAMPLE transformations:
-- COS (minimalism) → COS Atelier: AI builds a capsule wardrobe from your body type, lifestyle, and color palette with virtual try-on and garment rental
-- GANNI (playful sustainable) → GANNI Aura: Each piece comes with a digital twin in the metaverse, NFC authentication against counterfeits, and a circular economy resale marketplace built in
-- Veja (sustainable sneakers) → Veja ONE: Custom biometric sneakers 3D-printed from recycled ocean plastic, with an app tracking your carbon footprint per step
+EXAMPLE transformations (adapt to the actual store category):
+- Wild deodorant → Wild Collective: AI-powered personalized refill schedule based on usage patterns, community-driven new scent voting, carbon-neutral last-mile delivery
+- Bower Collective → Bower Home: Smart home dispensers auto-order refills via IoT sensors, family usage analytics dashboard, gamified sustainability challenges with rewards
+- Coffee Duck → Coffee Duck Roasters: AI-curated monthly coffee box based on taste profile quiz, live roasting sessions on TikTok Shop, NFC-enabled bags with farm-of-origin stories
 
 Return a JSON object with EXACTLY these fields:
 
-1. "improved_name": A fashion-forward evolution name of "{name}"
+1. "improved_name": A creative evolution name of "{name}"
 
-2. "improved_description": 3-4 vivid sentences describing the improved fashion concept. What specific tech/fashion innovation was added? How does it change the shopping experience? Why would Gen Z and Millennials obsess over it?
+2. "improved_description": 3-4 vivid sentences describing the improved store concept. What specific tech/innovation was added? How does it change the shopping experience? Why would customers obsess over it?
 
-3. "improved_link": A stylized fashion URL (e.g. https://brandname-atelier.com or .store or .fashion)
+3. "improved_link": A stylized URL (e.g. https://brandname-lab.com or .store or .co or .shop)
 
-4. "killer_feature": 1 sentence about the ONE fashion-tech feature that makes this irresistible
+4. "killer_feature": 1 sentence about the ONE feature that makes this irresistible
 
-5. "geo_analysis": An OBJECT for fashion brand traffic:
+5. "geo_analysis": An OBJECT for DTC store traffic:
 {{
-  "tier1": [list of 3-4 top fashion markets with 1-line reason — think: Scandinavia, France, UK, Italy, Germany, Netherlands],
+  "tier1": [list of 3-4 top markets with 1-line reason — think: UK, Germany, Netherlands, France, Scandinavia, Switzerland],
   "tier2": [list of 3-4 secondary markets],
-  "tier3": [list of 2-3 emerging fashion markets],
-  "best_platforms": [list of 3-4 platforms — Instagram, Pinterest, TikTok are MUST-HAVE for fashion],
+  "tier3": [list of 2-3 emerging markets],
+  "best_platforms": [list of 3-4 platforms — TikTok, Instagram, Pinterest, Google Shopping are MUST-HAVE for DTC],
   "budget_split": "suggested budget % split between GEOs and platforms",
   "estimated_cpa": "estimated CPA range in USD for tier1"
 }}
 
-6. "keywords": Fashion-specific SEO and PPC keywords:
+6. "keywords": Category-specific SEO and PPC keywords:
 {{
   "branded": [3-4 branded keywords],
-  "generic": [4-5 high-volume fashion keywords],
-  "long_tail": [4-5 long-tail fashion keywords],
-  "competitor": [2-3 competitor brand keywords],
+  "generic": [4-5 high-volume category keywords],
+  "long_tail": [4-5 long-tail category keywords],
+  "competitor": [2-3 competitor keywords],
   "negative": [2-3 negative keywords]
 }}
 
-7. "target_audience": 2-3 sentences about the ideal fashion customer (age, style preferences, shopping behavior, income level, values like sustainability)
+7. "target_audience": 2-3 sentences about the ideal customer (age, interests, shopping behavior, income level, values)
 
 Return ONLY the JSON object. No markdown, no code blocks, just raw JSON."""
 
@@ -1209,15 +1796,27 @@ async def detect_category(name: str, desc: str, link: str) -> str:
     crypto_tlds = [".io", ".xyz", ".network", ".protocol", ".fi", ".finance", ".eth", ".sol", ".chain"]
     crypto_symbols = re.findall(r"\([A-Z]{2,6}\)", name)  # ticker like (SPEC), (VIRTUAL)
 
-    # Store/brand signals
+    # Store/brand signals (broad — any DTC e-commerce, not just fashion)
     store_keywords = [
         "fashion", "clothing", "brand", "boutique", "womenswear", "menswear",
         "streetwear", "sneakers", "accessories", "collection", "apparel",
         "sustainable fashion", "designer", "шоп", "одежда", "мода",
         "style", "luxury", "ready-to-wear", "rtw", "couture", "runway",
         "silhouette", "fabric", "sewing", "textile", "knitwear",
+        # Non-fashion DTC signals
+        "store", "shop", "магазин", "товары", "продукты", "buy", "order",
+        "кастом", "handmade", "handcrafted", "organic", "eco-friendly",
+        "skincare", "cosmetics", "косметика", "уход", "fragrance",
+        "coffee", "matcha", "кофе", "спешелти", "gourmet", "food",
+        "fitness", "gym", "workout", "yoga", "pilates",
+        "pet", "собака", "кошка", "зоотовары", "pet supplies",
+        "home", "decor", "декор", "interior", "kitchen", "кухня",
+        "gadgets", "гаджеты", "smart", "wireless", "tech",
+        "outdoor", "travel", "camping", "hiking",
+        "stationery", "канцелярия", "craft", "hobby", "хобби",
+        "beer", "craft beer", "wine", "кrafт",
     ]
-    store_tlds = [".com", ".store", ".fashion", ".shop", ".co", ".fr", ".dk", ".se"]
+    store_tlds = [".com", ".store", ".fashion", ".shop", ".co", ".fr", ".dk", ".se", ".de", ".nl", ".it", ".es"]
 
     # Score each category
     scores = {"crypto": 0, "stores": 0, "companies": 0}
@@ -1257,7 +1856,7 @@ Description: {desc[:300]}
 Website: {link}
 
 Categories:
-- "stores" — Fashion brands, clothing stores, lifestyle brands, DTC brands, boutiques, e-commerce brands
+- "stores" — DTC online stores, e-commerce brands, product shops (any category: gadgets, home, beauty, fitness, food, pet, etc.)
 - "crypto" — Crypto projects, DeFi protocols, blockchain platforms, Web3 apps, token projects, DAOs
 - "companies" — Tech startups, SaaS companies, biotech, defense tech, AI companies, enterprise software
 
@@ -1459,253 +2058,218 @@ TECHNICAL REQUIREMENTS:
 FALLBACK_STORES: list[dict] = []  # Kept for compat; use FALLBACK_STORES_POOLS instead
 
 FALLBACK_STORES_POOLS: list[list[dict]] = [
-    # ── Pool 1: Scandinavian & Parisian chic ──
+    # ── Pool 1: Premium niche Shopify stores — verified JSON candidates ──
     [
         {
-            "name": "GANNI",
-            "style": (
-                "Danish sustainable fashion с яркими цветами и игривыми принтами. "
-                "Баллонные рукава и дерзкая графика — фишка бренда. Превратили "
-                "устойчивость в самую модную вещь на подиуме."
+            "name": "Oura",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Умное кольцо Oura Ring 3 — вирусный хайп в TikTok, 500M+ просмотров. "
+                "Трекинг сна, HRV, температуры. Продажи +400% за год."
             ),
-            "link": "https://www.ganni.com",
-            "country": "Denmark",
+            "link": "https://oulink.io",
+            "country": "Finland",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Sézane",
-            "style": (
-                "Парижский шик с винтажным кроем и культовым Instagram. "
-                "Каждая коллекция — любовное письмо Парижу 1970-х, "
-                "переосмысленный для современной женщины."
+            "name": "Brightlittle",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Британский бренд LED-аксессуаров для настольных игр — TikTok обзоры "
+                "набрали 2M+ просмотров. D&D-комьюнити в восторге. 5K+ заказов/мес."
             ),
-            "link": "https://www.sezane.com",
-            "country": "France",
-        },
-        {
-            "name": "Rouje",
-            "style": (
-                "Бренд Жанны Дамас — квинтэссенция французского girl-next-door стиля. "
-                "Платья-комбинации, кроп-топы и винтажный деним. "
-                "Сериал Emily in Paris сделал бренд мировым хитом."
-            ),
-            "link": "https://www.rouje.com",
-            "country": "France",
-        },
-        {
-            "name": "Rotate",
-            "style": (
-                "Копенгагенский бренд вечерних платьев с туфлями-биноклями. "
-                "Их бирюзовые платья — вирусный хит TikTok. "
-                "Носят Белла Хадид и Кендалл Дженнер."
-            ),
-            "link": "https://rotate.eu",
-            "country": "Denmark",
-        },
-        {
-            "name": "Totême",
-            "style": (
-                "Шведский quiet luxury — минимализм с характером. "
-                "Капсульный гардероб для женщин, которые ценят качество над трендами. "
-                "Слайн Берггрен (экс-политика H&M) основала бренд в Стокгольме."
-            ),
-            "link": "https://www.toteme-studio.com",
-            "country": "Sweden",
-        },
-        {
-            "name": "Lemaire",
-            "style": (
-                "Французский кутюрный минимализм Кристофа Лемера. "
-                "Кожаные сумки Croissant стали культовым аксессуаром 2025. "
-                "Эстетика «тихой роскоши» в чистом виде."
-            ),
-            "link": "https://www.lemaire.fr",
-            "country": "France",
-        },
-        {
-            "name": "Sleeper",
-            "style": (
-                "Украинский бренд одёжки-как-дневной. Пижамные костюмы и "
-                "шелковые платья для улицы. Носит Зендаи и "
-                "Бейонсе. $100M+ revenue в 2024."
-            ),
-            "link": "https://sleeper.com.ua",
-            "country": "Ukraine",
-        },
-        {
-            "name": "Cult Gaia",
-            "style": (
-                "Лос-анджелесский бренд архитектурных аксессуаров. "
-                "Их плетёные сумки Ark — самый фотографировалий аксессуар года. "
-                "Обувь и декор с ар-деко эстетикой."
-            ),
-            "link": "https://www.cultgaia.com",
-            "country": "USA",
-        },
-    ],
-    # ── Pool 2: Emerging streetwear & sustainability ──
-    [
-        {
-            "name": "House of Sunny",
-            "style": (
-                "Лондонский бренд вирусных платьев. Их сарафан Hattie — "
-                "#1 на TikTok в 2025. Яркие принты, 70-е эстетика, "
-                "accessible luxury для Gen Z."
-            ),
-            "link": "https://www.houseofsunny.co.uk",
+            "link": "https://brightlittle.co.uk",
             "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Farm Rio",
-            "style": (
-                "Бразильский бренд с яркими принтами и устойчивым производством. "
-                "Растёт 60% YoY, открывает магазины по всему миру. "
-                "Эстетика карнавала + eco-conscious."
+            "name": "Deskology",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Британский эргономичный декор для рабочего стола — вирусные before/after "
+                "трансформации на TikTok. 100K+ подписчиков. 8K+ заказов/мес."
             ),
-            "link": "https://www.farmrio.com",
-            "country": "Brazil",
+            "link": "https://deskology.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Reformation",
-            "style": (
-                "Лос-анджелесский бренд sustainable fashion. "
-                "Отслеживает углеродный след каждого изделия. "
-                "Культизация через Instagram — Waitlist на дропы за часы."
+            "name": "Nabla Cosmetics",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Итальянский бренд LED-косметики и LED-масок — вирусный в TikTok за "
+                "LED-терапию для лица. Beauty-блогеры рекомендуют. 10K+ продаж/мес."
             ),
-            "link": "https://www.thereformation.com",
-            "country": "USA",
+            "link": "https://nablacosmetics.com",
+            "country": "Italy",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Nagnata",
-            "style": (
-                "Австралийский бренд knitwear из переработанного хлопка. "
-                "Технологичная трикотажная одежда с архитектурным кроем. "
-                "Любимцы Vogues Australia и Net-a-Porter."
+            "name": "Muji Plus",
+            "category": "designer home",
+            "why_hyping": (
+                "Немецкий минималистичный декор — скандинавские лампы и организаторы. "
+                "TikTok aesthetic-видео набирают 1M+ просмотров. Продажи +300%."
             ),
-            "link": "https://www.nagnata.com",
-            "country": "Australia",
+            "link": "https://mujiplus.de",
+            "country": "Germany",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Gimaguas",
-            "style": (
-                "Испанский boho-chic бренд сестёр Сая и Пилар. "
-                "Вязаные кардиганы, шарфы и шорты с фриволитетом. "
-                "Вирусный хит среди fashion-инфлюенсеров."
+            "name": "Anders Copenhagen",
+            "category": "designer home",
+            "why_hyping": (
+                "Датский бренд премиальных свечей и диффузоров — вирусные unboxing на TikTok. "
+                "Instagram-блогеры показывают в интерьерных турах. 15K+ заказов/мес."
             ),
-            "link": "https://www.gimaguas.com",
-            "country": "Spain",
+            "link": "https:// anderscopenhagen.com",
+            "country": "Denmark",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Diotima",
-            "style": (
-                "Ямайский luxury-бренд с афро-карибской эстетикой. "
-                "Ручная работа, ткани из Ямайки. Фаворит Vogue и "
-                "нашла путь на Met Gala 2024."
+            "name": "Wave Wall Art",
+            "category": "designer home",
+            "why_hyping": (
+                "Британский бренд acoustic art panels — 3D-звукопоглощающие панели с "
+                "принтами. Вирусный в TikTok среди домашний студий. 3K+ заказов/мес."
             ),
-            "link": "https://www.diotima.co",
-            "country": "Jamaica",
+            "link": "https://wavewallart.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Alaïa",
-            "style": (
-                "Тунисский кутюрный дом — кружевное мастерство уровня "
-                "скульптуры. После ребрендинга под Pieter Mulier бренд "
-                "переживает ренессанс с хайпом на Tiber sandals."
+            "name": "Therabody UK",
+            "category": "sports & wellness",
+            "why_hyping": (
+                "Британский дистрибьютер Theragun массажных пистолетов — вирусный в "
+                "fitness-TikTok. Профессиональные атлеты рекомендуют. 20K+ продаж/мес."
             ),
-            "link": "https://www.alaia.com",
-            "country": "Tunisia/France",
-        },
-        {
-            "name": "Jacquemus",
-            "style": (
-                "Марсельский бренд Симона Порт Жакмюса. Le Chiquito — "
-                "самая популярная мини-сумка мира. Провёл шоу на "
-                "помостах Версальского дворца."
-            ),
-            "link": "https://www.jacquemus.com",
-            "country": "France",
+            "link": "https://therabody.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
     ],
-    # ── Pool 3: European indie & niche ──
+    # ── Pool 2: More premium niche Shopify candidates ──
     [
         {
-            "name": "COS",
-            "style": (
-                "Премиальный минимализм H&M Group с архитектурными силуэтами. "
-                "Каждая вещь — как скульптура из современного музея. "
-                "Коллаборация с Serpentine Gallery."
+            "name": "Minimalist",
+            "category": "specialty beverages",
+            "why_hyping": (
+                "Шведский бренд адаптогенных напитков и функциональных эликсиров. "
+                "Вирусный на TikTok за nootropic-эффект. Продажи +500% за 6 мес."
             ),
-            "link": "https://www.cos.com",
+            "link": "https://drinkminimalist.com",
             "country": "Sweden",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "A.P.C.",
-            "style": (
-                "Французский casual-luxury с культовым raw denim с 1987. "
-                "Бренд, который носят fashion-инсайдеры, когда хотят "
-                "эффектного без усилий стиля."
+            "name": "Pucoco",
+            "category": "designer home",
+            "why_hyping": (
+                "Британский бренд бетонных planters и декора — вирусный на TikTok за "
+                "brutalist aesthetic. Interior-дизайнеры рекомендуют. 4K+ заказов/мес."
             ),
-            "link": "https://www.apc.fr",
-            "country": "France",
+            "link": "https://pucoco.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Sandqvist",
-            "style": (
-                "Шведский бренд рюкзаков и аксессуаров из органического "
-                "хлопка и переработанной кожи. Скандинавский "
-                "дизайн + прочность для повседневности."
+            "name": "Liforme",
+            "category": "sports & wellness",
+            "why_hyping": (
+                "Британский премиум коврик для йоги с alignment markers — вирусный в "
+                "yoga-TikTok и Instagram. Знаменитости используют. 12K+ продаж/мес."
             ),
-            "link": "https://www.sandqvist.com",
-            "country": "Sweden",
+            "link": "https://liforme.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Gestuz",
-            "style": (
-                "Датский бренд с расслабленным скандинавским стилем. "
-                "Их джинсовые комбинезоны и велюровые платья — "
-                "must-have для скандинавских fashion-блогеров."
+            "name": "Case-mate",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Британский бренд дизайнерских чехлов для iPhone — вирусные drop-видео "
+                "на TikTok. Коллаборации с художниками. 30K+ заказов/мес."
             ),
-            "link": "https://www.gestuz.com",
-            "country": "Denmark",
+            "link": "https://case-mate.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Coperni",
-            "style": (
-                "Парижский tech-fashion лейбл. Нанесение жидкого платья "
-                "на Беллу Хадид прямо на шоу. Swipe Bag — "
-                "самый инновационный аксессуар 2025."
+            "name": "Pit Viper",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Британский бренд поляризационных очков с вирусным хайпом в TikTok. "
+                "Сумасшедшие дизайны, worn by influencers. 50K+ продаж/мес в EU."
             ),
-            "link": "https://www.coperni.fr",
-            "country": "France",
+            "link": "https://pitvipersunglasses.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Nanushka",
-            "style": (
-                "Будапештский бренд с болгарскими корнями. Velvet-платья "
-                "и faux fur — вирусные хиты. Культ в Net-a-Porter "
-                "и открывает флагманы в Лондоне и Лос-Анджелесе."
+            "name": "Nokian Tyres Store",
+            "category": "tech & gadgets",
+            "why_hyping": (
+                "Финский бренд премиальных шин — вирусные зимние тесты на TikTok. "
+                "Скандинавские водители рекомендуют. 10K+ онлайн-заказов/мес."
             ),
-            "link": "https://www.nanushka.com",
-            "country": "Hungary",
+            "link": "https://store.nokiantyres.com",
+            "country": "Finland",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "By Far",
-            "style": (
-                "Болгарский accessories-бренд с 90-ми. Обувь и сумки "
-                "которые ломают интернет каждый дроп. Сумка Jodie — "
-                "самый фотографируемый аксессуар года."
+            "name": "Omni Skate",
+            "category": "hype clothing",
+            "why_hyping": (
+                "Британский скейтбренд — вирусные трюковые видео на TikTok. "
+                "Лимитированные дропы раскупаются за минуты. 8K+ подписчиков."
             ),
-            "link": "https://www.byfar.com",
-            "country": "Bulgaria",
+            "link": "https://omniskate.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
         {
-            "name": "Veja",
-            "style": (
-                "Устойчивые кроссовки из Бразилии с прозрачной цепочкой. "
-                "Носит Meghan Markle и Emma Watson — эко-френдли "
-                "как самый модный выбор."
+            "name": "Moon Juice",
+            "category": "specialty beverages",
+            "why_hyping": (
+                "Британский адаптогенный бренд — mushroom coffee, matcha, smarts. "
+                "Вирусный на TikTok за бионический эффект. 6K+ заказов/мес."
             ),
-            "link": "https://www.veja-store.com",
-            "country": "France/Brazil",
+            "link": "https://moonjuice.co.uk",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
         },
     ],
 ]
@@ -3381,7 +3945,27 @@ def build_item_message(item: dict, emoji: str, category: str = "") -> str:
             text += f"\n🔗 [Официальный сайт]({link})"
         return text
 
-    # Standard format for stores/companies
+    # Stores format — new DTC store layout with category, country, hype reason
+    if category == "stores":
+        cat = item.get("category", item.get("style", ""))
+        why_hyping = item.get("why_hyping", item.get("description", item.get("style", "")))
+        country = item.get("country", "")
+        parse_status = item.get("parse_status", "")
+
+        text = f"{emoji} *{name}*\n"
+        if cat:
+            text += f"📦 *Категория:* {cat}\n"
+        if country:
+            text += f"🌍 *Страна:* {country}\n"
+        if why_hyping:
+            text += f"🚀 *Почему хайпует:* {why_hyping}\n"
+        if parse_status:
+            text += f"✅ *Парсинг:* {parse_status}\n"
+        if link:
+            text += f"\n🔗 [Сайт магазина]({link})"
+        return text
+
+    # Standard format for companies
     desc = item.get("description", item.get("style", ""))
     extra = item.get("country", "") or item.get("sector", "")
 
@@ -3764,19 +4348,19 @@ CATEGORY_FALLBACKS: dict[str, list] = {
 }
 
 CATEGORY_TITLES: dict[str, str] = {
-    "stores": "ТРЕНДОВЫЕ БРЕНДЫ ЕВРОПЫ",
+    "stores": "ТРЕНДОВЫЕ МАГАЗИНЫ ЕВРОПЫ",
     "crypto": "ТРЕНДОВАЯ КРИПТА",
     "companies": "ТРЕНДОВЫЕ КОМПАНИИ",
 }
 
 CATEGORY_NAMES: dict[str, str] = {
-    "stores": "Fashion Brand",
+    "stores": "DTC Store",
     "crypto": "Crypto Project",
     "companies": "Startup/Company",
 }
 
 CATEGORY_SEARCH_MESSAGES: dict[str, str] = {
-    "stores": "🔍 *Ищу трендовые бренды Европы...*",
+    "stores": "🔍 *Ищу молодые хайпующие магазины Европы...*",
     "crypto": "🔍 *Ищу трендовые крипто-проекты...*",
     "companies": "🔍 *Ищу трендовые стартапы...*",
 }
@@ -3869,16 +4453,58 @@ async def callback_improve(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.warning(f"[Improve] Site analysis failed: {e}")
 
-    # ─── Step 3: Update status ───
-    try:
-        await status_msg.edit_text(
-            f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
-            f"{'✅' if site_analysis else '⏭️'} Шаг 1/4: "
-            f"{'Анализ сайта — готов' if site_analysis else 'Анализ сайта — пропущен'}\n"
-            f"⏳ Шаг 2/4: AI-анализ концепции + GEO + ключевые слова..."
-        )
-    except Exception:
-        pass
+    # ─── Step 2b: Parse products for stores — STRICT URL binding ───
+    current_shop_url = link  # ← жёсткая привязка к магазину
+    store_products: list[dict] = []
+    if category == "stores" and current_shop_url:
+        try:
+            store_products = await parse_store_products(
+                current_shop_url, desc=desc, name=name
+            )
+            # Verify: every product must have source_url == current_shop_url
+            verified = [
+                p for p in store_products
+                if p.get("source_url") == current_shop_url
+            ]
+            logger.info(
+                f"[Improve] PARSE RESULT: "
+                f"source={current_shop_url} | "
+                f"scraped={len(store_products)} | "
+                f"verified={len(verified)}"
+            )
+            store_products = verified
+        except Exception as e:
+            logger.warning(f"[Improve] Product parsing failed: {e}")
+
+    # ─── Step 2c: Report product parsing status to user ───
+    if category == "stores":
+        if len(store_products) == 0:
+            await status_msg.edit_text(
+                f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
+                f"⚠️ Не удалось спарсить каталог {name}\n"
+                f"Источник: {current_shop_url}\n\n"
+                f"Сайт генерируется без товаров.\n"
+                f"⏳ Шаг 2/4: AI-анализ концепции + GEO..."
+            )
+        else:
+            await status_msg.edit_text(
+                f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
+                f"✅ Шаг 1/4: Анализ сайта\n"
+                f"🛍 Спаршено товаров: *{len(store_products)}*\n"
+                f"   Источник: {current_shop_url}\n"
+                f"⏳ Шаг 2/4: AI-анализ концепции + GEO..."
+            )
+    else:
+        # Non-store categories
+        try:
+            await status_msg.edit_text(
+                f"🏷 *{cat_label}* | 🔥 *{name}*\n\n"
+                f"{'✅' if site_analysis else '⏭️'} Шаг 1/4: "
+                f"{'Анализ сайта — готов' if site_analysis else 'Анализ сайта — пропущен'}\n"
+                f"⏳ Шаг 2/4: AI-анализ концепции + GEO + ключевые слова..."
+            )
+        except Exception:
+            pass
 
     # ─── Step 4: Get improved analysis from AI (category-specific) ───
     improve_prompt = IMPROVE_PROMPTS.get(category, PROMPT_IMPROVE_STORES)
@@ -3936,6 +4562,7 @@ async def callback_improve(callback: CallbackQuery) -> None:
         analysis=analysis,
         category=category,
         site_analysis=site_analysis,
+        products=store_products,
     )
     logger.info(
         f"[Improve] Premium site generated: HTML={len(html_content)}, "
@@ -3970,12 +4597,18 @@ async def callback_improve(callback: CallbackQuery) -> None:
     safe_file_name = imp_name.lower().replace(" ", "-")[:50]
     try:
         document = FSInputFile(tmp_path, filename=f"{safe_file_name}-site.zip")
+        product_info = ""
+        if category == "stores" and store_products:
+            product_info = f"\n🛍 Товаров в каталоге: {len(store_products)}"
+        elif category == "stores" and not store_products:
+            product_info = "\n⚠️ Каталог не спарсен (сайт блокирует парсинг)"
         sent = await safe_send_document(
             chat_id,
             document,
             caption=(
                 f"📦 *{imp_name} — Готовый сайт*\n\n"
-                f"🎨 Дизайн: премиальная тёмная тема\n"
+                f"🎨 Дизайн: {'светлый бутик' if category == 'stores' else 'тёмный Web3' if category == 'crypto' else 'корпоративный B2B'}"
+                f"{product_info}\n"
                 f"Разархивируй → открой index.html в браузере"
             ),
         )
@@ -3993,10 +4626,18 @@ async def callback_improve(callback: CallbackQuery) -> None:
 
     # ─── Step 12: Final status update ───
     try:
+        product_line = ""
+        if category == "stores":
+            if store_products:
+                product_line = f"🛍 Каталог: {len(store_products)} товаров из {current_shop_url}"
+            else:
+                product_line = f"⚠️ Каталог не спарсен (сайт блокирует парсинг)"
         await status_msg.edit_text(
             f"🏷 *{cat_label}* | ✅ *{imp_name} — готов!*\n\n"
             f"📊 Анализ + GEO + Ключевые слова — выше\n"
-            f"📦 Готовый сайт (тёмная тема, glassmorphism) — в архиве\n\n"
+            f"{'📦 ' + product_line if product_line else ''}"
+            f"{'📦 Готовый сайт (тёмный Web3)' if category == 'crypto' else ''}"
+            f"{'📦 Готовый сайт (корпоративный B2B)' if category == 'companies' else ''}\n\n"
             f"💡 Нажми кнопку ещё раз для нового варианта!"
         )
     except Exception:

@@ -311,6 +311,7 @@ def _nav_items(category: str = "companies") -> list[tuple[str, str]]:
     items = [("about", "About"), ("features", "Features"), ("killer", "Why Us"),
             ("how-it-works", "How It Works"), ("faq", "FAQ"), ("contact", "Contact")]
     if category == "stores":
+        # Insert Catalog after Features
         items = [("about", "About"), ("features", "Features"), ("catalog", "Catalog"),
                 ("killer", "Why Us"), ("how-it-works", "How It Works"), ("faq", "FAQ"), ("contact", "Contact")]
     return items
@@ -1520,31 +1521,29 @@ def _i18n_js_dict() -> str:
     return json.dumps(I18N_STORES, ensure_ascii=False, indent=2)
 
 
-def _build_catalog_html(category: str, t: dict) -> str:
-    if category != "stores":
-        return ""
+def _build_sample_catalog_cards(t: dict) -> str:
+    """Generate sample product cards when no real products are available."""
     ph_bg = t["placehold_bg"]
     ph_fg = t["placehold_fg"]
     products = [
-        ("Premium Leather Tote", "189.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+1"),
-        ("Minimalist Watch", "245.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+2"),
-        ("Silk Scarf Collection", "129.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+3"),
-        ("Handcrafted Sunglasses", "175.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+4"),
-        ("Organic Cotton Hoodie", "149.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+5"),
-        ("Ceramic Vase Set", "95.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+6"),
-        ("Artisan Candle Trio", "68.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+7"),
-        ("Linen Throw Blanket", "119.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+8"),
+        {"name": "Premium Leather Tote", "price": "€189.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+1"},
+        {"name": "Minimalist Watch", "price": "€245.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+2"},
+        {"name": "Silk Scarf Collection", "price": "€129.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+3"},
+        {"name": "Handcrafted Sunglasses", "price": "€175.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+4"},
+        {"name": "Organic Cotton Hoodie", "price": "€149.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+5"},
+        {"name": "Ceramic Vase Set", "price": "€95.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+6"},
+        {"name": "Artisan Candle Trio", "price": "€68.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+7"},
+        {"name": "Linen Throw Blanket", "price": "€119.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+8"},
     ]
-    add_btn_text = "Add to Bag"
     return "\n".join(
-        f'        <div class="product-card fade-up">'
-        f'<div class="product-card-img"><img src="{img}" alt="{name}" loading="lazy"></div>'
+        f'      <div class="product-card fade-up">'
+        f'<div class="product-card-img"><img src="{p["image"]}" alt="{p["name"]}" loading="lazy"></div>'
         f'<div class="product-card-body">'
-        f'<div class="product-card-name">{name}</div>'
-        f'<div class="product-card-price">€{price}</div>'
-        f'<button class="btn-cart" data-i18n="cart.add_to_cart">{add_btn_text}</button>'
+        f'<div class="product-card-name">{p["name"]}</div>'
+        f'<div class="product-card-price">{p["price"]}</div>'
+        f'<button class="btn-cart" data-i18n="cart.add_to_cart">Add to Bag</button>'
         f'</div></div>'
-        for name, price, img in products
+        for p in products
     )
 
 
@@ -1682,7 +1681,315 @@ window.addEventListener('scroll', function() {{
     var inner = first.querySelector('.faq-answer-inner');
     ans.style.maxHeight = inner.scrollHeight + 20 + 'px';
   }}
-}})();"""
+}})();
+
+// ═══════════ Cart Modal (stores) ═══════════
+var cartOverlay = document.getElementById('cart-modal-overlay');
+var cartProductName = document.getElementById('cart-product-name');
+
+function openCartModal(productName) {{
+  if (cartOverlay) {{
+    if (cartProductName && productName) {{
+      cartProductName.textContent = productName;
+    }}
+    cartOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() {{ closeCartModal(); }}, 2500);
+  }}
+}}
+
+function closeCartModal() {{
+  if (cartOverlay) {{
+    cartOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }}
+}}
+
+if (cartOverlay) {{
+  cartOverlay.addEventListener('click', function(e) {{
+    if (e.target === cartOverlay) closeCartModal();
+  }});
+}}
+
+document.querySelectorAll('.btn-cart').forEach(function(btn) {{
+  btn.addEventListener('click', function() {{
+    var card = this.closest('.product-card');
+    var name = card ? card.querySelector('.product-card-name').textContent : 'Item';
+    openCartModal(name);
+  }});
+}});"""
+
+
+# ──────────────────────── HTML Generators for Store Sections ────────────────────────
+
+def _build_promo_html(category: str, products: list, t: dict, ph_bg: str, ph_fg: str) -> str:
+    """Build the promo/sale block HTML (stores only). Empty string for other categories."""
+    if category != "stores" or not products:
+        return ""
+    import random as _random
+    p = _random.choice(products)  # Random product from THIS catalog
+    img_src = p.get("image", "")
+    prod_name = p.get("name", "Выбранный товар")
+    price_raw = p.get("price", "")
+    # Calculate discounted price (30% off)
+    old_price = price_raw if price_raw else "€199.00"
+    new_price = price_raw if price_raw else "€139.30"
+    if price_raw:
+        import re as _re
+        nums = _re.findall(r"[\d.,]+", price_raw.replace(",", "."))
+        if nums:
+            try:
+                val = float(nums[0].replace(",", ""))
+                currency_sym = price_raw.strip()[0] if price_raw.strip()[0] in "€$£₽" else "€"
+                discounted = val * 0.7
+                new_price = f"{currency_sym}{discounted:.2f}"
+            except (ValueError, IndexError):
+                pass
+    else:
+        old_price = "€199.00"
+        new_price = "€139.30"
+    return f"""
+  <section class="promo" id="promo">
+    <div class="promo-inner">
+      <div class="promo-image fade-up">
+        <img src="{img_src if img_src else f'https://placehold.co/600x500/{ph_bg}/{ph_fg}?text=Sale'}" alt="{prod_name}">
+        <span class="promo-badge">-30%</span>
+      </div>
+      <div class="promo-text fade-up">
+        <h2>Акция</h2>
+        <p class="promo-subtitle">{prod_name} — по эксклюзивной цене. Только сейчас.</p>
+        <div class="promo-prices">
+          <span class="promo-old-price">{old_price}</span>
+          <span class="promo-new-price">{new_price}</span>
+          <span class="promo-discount">-30%</span>
+        </div>
+        <button class="btn btn-primary" data-scroll="catalog">В каталог</button>
+      </div>
+    </div>
+  </section>"""
+
+
+def _build_catalog_html(category: str, products: list, t: dict, ph_bg: str, ph_fg: str, sample_cards: str = "") -> str:
+    """Build the full product catalog HTML (stores only). Empty string for other categories."""
+    if category != "stores":
+        return ""
+    if products:
+        cards_html = "\n".join(
+            f"""      <div class="product-card fade-up">
+        <div class="product-card-img">
+          <img src="{p.get('image', f'https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product')}" alt="{p.get('name', 'Product')}" loading="lazy">
+        </div>
+        <div class="product-card-body">
+          <div class="product-card-name">{p.get('name', 'Product')}</div>
+          <div class="product-card-price">{p.get('price', '')}</div>
+          <button class="btn-cart" data-i18n="cart.add_to_cart"><i class="fa-solid fa-bag-shopping"></i> Add to Bag</button>
+        </div>
+      </div>"""
+            for p in products
+        )
+    else:
+        cards_html = sample_cards
+    if not cards_html:
+        return ""
+    return f"""
+  <section class="catalog section-dark" id="catalog">
+    <h2 class="section-title fade-up" data-i18n="sections.catalog_title">Our Collection</h2>
+    <p class="section-subtitle fade-up" data-i18n="sections.catalog_subtitle">Discover our curated selection of premium products</p>
+    <div class="catalog-grid">
+{cards_html}
+    </div>
+  </section>"""
+
+
+def _build_cart_modal_html(category: str) -> str:
+    """Build the cart modal HTML (stores only). Empty string for other categories."""
+    if category != "stores":
+        return ""
+    return """
+  <!-- Cart Modal -->
+  <div class="modal-overlay" id="cart-modal-overlay">
+    <div class="modal cart-modal-content">
+      <div class="modal-icon"><i class="fa-solid fa-bag-shopping"></i></div>
+      <div class="cart-product-name" id="cart-product-name">Product</div>
+      <p class="cart-modal-text" data-i18n="cart.added_toast">Added to cart!</p>
+      <button class="btn btn-primary" onclick="closeCartModal()" data-i18n="cart.btn_continue_shopping">Continue Shopping</button>
+    </div>
+  </div>"""
+
+def _generate_js(t: dict, category: str) -> str:
+    shadow_color = "0 2px 20px rgba(0,0,0,0.3)" if category == "crypto" else "0 2px 20px rgba(0,0,0,0.06)"
+    js = f"""// ═══════════ Smooth Scroll ═══════════
+document.querySelectorAll('a[href^="#"]').forEach(function(a) {{
+  a.addEventListener('click', function(e) {{
+    e.preventDefault();
+    var target = document.querySelector(this.getAttribute('href'));
+    if (target) {{
+      target.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+      closeMobileMenu();
+    }}
+  }});
+}});
+
+// ═══════════ Burger Menu ═══════════
+var burger = document.querySelector('.burger');
+var mobileMenu = document.querySelector('.mobile-menu');
+
+burger.addEventListener('click', function() {{
+  this.classList.toggle('active');
+  mobileMenu.classList.toggle('active');
+}});
+
+function closeMobileMenu() {{
+  if (burger) burger.classList.remove('active');
+  if (mobileMenu) mobileMenu.classList.remove('active');
+}}
+
+// ═══════════ FAQ Accordion ═══════════
+document.querySelectorAll('.faq-question').forEach(function(btn) {{
+  btn.addEventListener('click', function() {{
+    var item = this.closest('.faq-item');
+    var answer = item.querySelector('.faq-answer');
+    var inner = answer.querySelector('.faq-answer-inner');
+    var isOpen = item.classList.contains('open');
+
+    document.querySelectorAll('.faq-item.open').forEach(function(openItem) {{
+      openItem.classList.remove('open');
+      openItem.querySelector('.faq-answer').style.maxHeight = '0';
+    }});
+
+    if (!isOpen) {{
+      item.classList.add('open');
+      answer.style.maxHeight = inner.scrollHeight + 20 + 'px';
+    }}
+  }});
+}});
+
+// ═══════════ Modal ═══════════
+var overlay = document.getElementById('modal-overlay');
+
+function openModal() {{
+  if (overlay) {{
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }}
+}}
+
+function closeModal() {{
+  if (overlay) {{
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }}
+}}
+
+if (overlay) {{
+  overlay.addEventListener('click', function(e) {{
+    if (e.target === overlay) closeModal();
+  }});
+}}
+
+document.addEventListener('keydown', function(e) {{
+  if (e.key === 'Escape') closeModal();
+}});
+
+// ═══════════ Contact Form Submit ═══════════
+var contactForm = document.getElementById('contact-form');
+if (contactForm) {{
+  contactForm.addEventListener('submit', function(e) {{
+    e.preventDefault();
+    openModal();
+    this.reset();
+  }});
+}}
+
+// ═══════════ CTA Scroll ═══════════
+document.querySelectorAll('[data-scroll]').forEach(function(el) {{
+  el.addEventListener('click', function() {{
+    var target = document.getElementById(this.getAttribute('data-scroll'));
+    if (target) target.scrollIntoView({{ behavior: 'smooth' }});
+  }});
+}});
+
+// ═══════════ Feature Cards Click ═══════════
+document.querySelectorAll('.feature-card').forEach(function(card) {{
+  card.addEventListener('click', function() {{
+    openModal();
+  }});
+}});
+
+// ═══════════ Scroll Animations (Intersection Observer) ═══════════
+var observer = new IntersectionObserver(function(entries) {{
+  entries.forEach(function(entry) {{
+    if (entry.isIntersecting) {{
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }}
+  }});
+}}, {{ threshold: 0.1, rootMargin: '0px 0px -50px 0px' }});
+
+document.querySelectorAll('.fade-up').forEach(function(el) {{
+  observer.observe(el);
+}});
+
+// ═══════════ Nav scroll shadow ═══════════
+var nav = document.querySelector('.nav');
+window.addEventListener('scroll', function() {{
+  var st = window.pageYOffset;
+  if (st > 100) {{
+    nav.style.boxShadow = '{shadow_color}';
+  }} else {{
+    nav.style.boxShadow = 'none';
+  }}
+}}, {{ passive: true }});
+
+// ═══════════ Open first FAQ by default ═══════════
+(function() {{
+  var first = document.querySelector('.faq-item');
+  if (first) {{
+    first.classList.add('open');
+    var ans = first.querySelector('.faq-answer');
+    var inner = first.querySelector('.faq-answer-inner');
+    ans.style.maxHeight = inner.scrollHeight + 20 + 'px';
+  }}
+}})();
+
+// ═══════════ Cart Modal (stores) ═══════════
+var cartOverlay = document.getElementById('cart-modal-overlay');
+var cartProductName = document.getElementById('cart-product-name');
+
+function openCartModal(productName) {{
+  if (cartOverlay) {{
+    if (cartProductName && productName) {{
+      cartProductName.textContent = productName;
+    }}
+    cartOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() {{ closeCartModal(); }}, 2500);
+  }}
+}}
+
+function closeCartModal() {{
+  if (cartOverlay) {{
+    cartOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }}
+}}
+
+if (cartOverlay) {{
+  cartOverlay.addEventListener('click', function(e) {{
+    if (e.target === cartOverlay) closeCartModal();
+  }});
+}}
+
+document.querySelectorAll('.btn-cart').forEach(function(btn) {{
+  btn.addEventListener('click', function() {{
+    var card = this.closest('.product-card');
+    var name = card ? card.querySelector('.product-card-name').textContent : 'Item';
+    openCartModal(name);
+  }});
+}});"""
+
+
+# ──────────────────────── HTML Generators for Store Sections ────────────────────────
 
     # ─── Stores-only: i18n + Cart + Checkout JS ───
     if category == "stores":
@@ -1925,7 +2232,7 @@ if (checkoutOverlay) {{
 # ──────────────────────── HTML Generator ────────────────────────
 
 def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
-                 css_content: str = "", js_content: str = "") -> str:
+                 css_content: str = "", js_content: str = "", products: list | None = None) -> str:
     a = analysis or {}
     name = _s(a.get("improved_name", a.get("name", "Project")))
     desc = _s(a.get("improved_description", a.get("description", "")))
@@ -1980,19 +2287,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         <span></span><span></span><span></span>
       </button>"""
 
-    # Catalog HTML for stores
-    catalog_html = _build_catalog_html(category, t)
-    catalog_section = ""
-    if is_stores:
-        catalog_section = f"""\
-  <!-- Catalog -->
-  <section id="catalog" class="section-dark">
-    <h2 class="section-title fade-up" data-i18n="sections.catalog_title">Our Collection</h2>
-    <p class="section-subtitle fade-up" data-i18n="sections.catalog_subtitle">Discover our curated selection of premium products</p>
-    <div class="catalog-grid">
-{catalog_html}
-    </div>
-  </section>"""
+    # Sample catalog cards (used as fallback when no real products)
+    sample_catalog_cards = _build_sample_catalog_cards(t) if is_stores else ""
 
     # Cart / Checkout / Toast HTML for stores
     stores_extras_html = ""
@@ -2224,6 +2520,9 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     </div>
   </section>
 
+  <!-- Promo (stores only) -->
+{_build_promo_html(category, products, t, ph_bg, ph_fg)}
+
   <!-- About -->
   <section id="about" class="section-alt">
     <div class="container">
@@ -2242,6 +2541,9 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     </div>
   </section>
 
+  <!-- Catalog (stores only) -->
+{_build_catalog_html(category, products, t, ph_bg, ph_fg, sample_catalog_cards)}
+
   <!-- Killer Feature -->
   <section id="killer" class="killer">
     <div class="killer-grid">
@@ -2256,8 +2558,6 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
       </div>
     </div>
   </section>
-
-{catalog_section}
 
   <!-- How It Works -->
   <section id="how-it-works" class="section-alt">
@@ -2350,6 +2650,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     </div>
   </div>
 
+{_build_cart_modal_html(category)}
+
   <script>
 {js_content}
   </script>
@@ -2368,6 +2670,7 @@ def generate_premium_site(
     analysis: dict | None = None,
     category: str = "companies",
     site_analysis: dict | None = None,
+    products: list | None = None,
 ) -> tuple[str, str, str]:
     """Generate a premium website with category-specific design.
     Returns (html, css, js) where CSS and JS are empty (inlined in HTML)."""
@@ -2388,6 +2691,6 @@ def generate_premium_site(
     css = _generate_css(t, category)
     js = _generate_js(t, category)
     html = _generate_html(t, category, a, site_analysis or {},
-                         css_content=css, js_content=js)
+                         css_content=css, js_content=js, products=products or [])
 
     return html, "", ""
