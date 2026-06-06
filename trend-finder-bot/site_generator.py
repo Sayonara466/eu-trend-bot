@@ -185,6 +185,75 @@ SEO_KEYWORDS = {
     "companies": "enterprise SaaS, cloud platform, business solution, scalable infrastructure, AI-powered",
 }
 
+I18N_STORES = {
+    "nav": {
+        "about":       {"en":"About","de":"Über uns","fr":"À propos","es":"Acerca de","it":"Chi siamo","nl":"Over ons","pl":"O nas"},
+        "features":    {"en":"Features","de":"Eigenschaften","fr":"Caractéristiques","es":"Características","it":"Caratteristiche","nl":"Kenmerken","pl":"Funkcje"},
+        "catalog":     {"en":"Catalog","de":"Katalog","fr":"Catalogue","es":"Catálogo","it":"Catalogo","nl":"Catalogus","pl":"Katalog"},
+        "why_us":      {"en":"Why Us","de":"Warum wir","fr":"Pourquoi nous","es":"Por qué nosotros","it":"Perché noi","nl":"Waarom wij","pl":"Dlaczego my"},
+        "how_it_works":{"en":"How It Works","de":"So funktioniert's","fr":"Comment ça marche","es":"Cómo funciona","it":"Come funziona","nl":"Hoe het werkt","pl":"Jak to działa"},
+        "faq":         {"en":"FAQ","de":"FAQ","fr":"FAQ","es":"FAQ","it":"FAQ","nl":"Veelgestelde vragen","pl":"FAQ"},
+        "contact":     {"en":"Contact","de":"Kontakt","fr":"Contact","es":"Contacto","it":"Contatti","nl":"Contact","pl":"Kontakt"},
+    },
+    "hero": {
+        "cta_explore": {"en":"Explore Features","de":"Eigenschaften entdecken","fr":"Découvrir","es":"Explorar","it":"Scopri","nl":"Kenmerken bekijken","pl":"Odkryj"},
+        "cta_how":     {"en":"How It Works","de":"So funktioniert's","fr":"Comment ça marche","es":"Cómo funciona","it":"Come funziona","nl":"Hoe het werkt","pl":"Jak to działa"},
+    },
+    "sections": {
+        "about_title":     {"en":"About","de":"Über uns","fr":"À propos","es":"Acerca de","it":"Chi siamo","nl":"Over ons","pl":"O nas"},
+        "about_subtitle":  {"en":"Redefining what's possible","de":"Neu definieren, was möglich ist","fr":"Redéfinir le possible","es":"Redefiniendo lo posible","it":"Ridefinire il possibile","nl":"Hermensen wat mogelijk is","pl":"Zmieniamy to, co możliwe"},
+        "features_title":   {"en":"Features","de":"Eigenschaften","fr":"Caractéristiques","es":"Características","it":"Caratteristiche","nl":"Kenmerken","pl":"Funkcje"},
+        "features_subtitle":{"en":"Everything you need, nothing you don't","de":"Alles, was Sie brauchen, nichts, was Sie nicht brauchen","fr":"Tout ce dont vous avez besoin, rien de superflu","es":"Todo lo que necesitas, nada que no","it":"Tutto ciò di cui hai bisogno, niente di superfluo","nl":"Alles wat u nodig heeft, niets meer","pl":"Wszystko, czego potrzebujesz, nic zbędnego"},
+        "catalog_title":    {"en":"Our Collection","de":"Unsere Kollektion","fr":"Notre Collection","es":"Nuestra Colección","it":"La Nostra Collezione","nl":"Onze Collectie","pl":"Nasza Kolekcja"},
+        "catalog_subtitle": {"en":"Discover our curated selection of premium products","de":"Entdecken Sie unsere kuratierte Auswahl an Premium-Produkten","fr":"Découvrez notre sélection de produits premium","es":"Descubre nuestra selección curada de productos premium","it":"Scopri la nostra selezione curata di prodotti premium","nl":"Ontdek onze samengestelde selectie van premium producten","pl":"Odkryj naszą starannie dobraną ofertę produktów premium"},
+        "why_title":        {"en":"Why Choose Us","de":"Warum uns wählen","fr":"Pourquoi nous choisir","es":"Por qué elegirnos","it":"Perché sceglierci","nl":"Waarom voor ons kiezen","pl":"Dlaczego warto nas wybrać"},
+        "why_subtitle":     {"en":"Simple steps to get started","de":"Einfache Schritte zum Starten","fr":"Étapes simples pour commencer","es":"Pasos simples para comenzar","it":"Semplici passi per iniziare","nl":"Eenvoudige stappen om te beginnen","pl":"Proste kroki, aby zacząć"},
+        "steps_title":      {"en":"How It Works","de":"So funktioniert's","fr":"Comment ça marche","es":"Cómo funciona","it":"Come funziona","nl":"Hoe het werkt","pl":"Jak to działa"},
+        "steps_subtitle":   {"en":"Simple steps to get started","de":"Einfache Schritte zum Starten","fr":"Étapes simples pour commencer","es":"Pasos simples para comenzar","it":"Semplici passi per iniziare","nl":"Eenvoudige stappen om te beginnen","pl":"Proste kroki, aby zacząć"},
+        "faq_title":        {"en":"Frequently Asked Questions","de":"Häufig gestellte Fragen","fr":"Questions Fréquentes","es":"Preguntas Frecuentes","it":"Domande Frequenti","nl":"Veelgestelde Vragen","pl":"Często zadawane pytania"},
+        "faq_subtitle":     {"en":"Got questions? We have answers","de":"Fragen? Wir haben Antworten","fr":"Des questions? Nous avons les réponses","es":"¿Preguntas? Tenemos respuestas","it":"Domande? Abbiamo risposte","nl":"Vragen? Wij hebben antwoorden","pl":"Pytania? Mamy odpowiedzi"},
+        "contact_title":    {"en":"Get In Touch","de":"Kontaktieren Sie uns","fr":"Contactez-nous","es":"Contáctenos","it":"Contattaci","nl":"Neem contact op","pl":"Skontaktuj się"},
+        "contact_subtitle": {"en":"We'd love to hear from you","de":"Wir würden uns freuen, von Ihnen zu hören","fr":"Nous aimerions avoir de vos nouvelles","es":"Nos encantaría saber de usted","it":"Ci piacerebbe sentirti","nl":"We horen graag van u","pl":"Chcielibyśmy usłyszeć od Ciebie"},
+    },
+    "contact": {
+        "name_placeholder":    {"en":"Your Name","de":"Ihr Name","fr":"Votre nom","es":"Su nombre","it":"Il tuo nome","nl":"Uw naam","pl":"Twoje imię"},
+        "email_placeholder":   {"en":"Email Address","de":"E-Mail-Adresse","fr":"Adresse e-mail","es":"Correo electrónico","it":"Indirizzo email","nl":"E-mailadres","pl":"Adres e-mail"},
+        "message_placeholder": {"en":"Your Message","de":"Ihre Nachricht","fr":"Votre message","es":"Su mensaje","it":"Il tuo messaggio","nl":"Uw bericht","pl":"Twoja wiadomość"},
+        "send_button":         {"en":"Send Message","de":"Nachricht senden","fr":"Envoyer","es":"Enviar mensaje","it":"Invia messaggio","nl":"Bericht versturen","pl":"Wyślij wiadomość"},
+        "info_title":          {"en":"Contact Info","de":"Kontaktinformationen","fr":"Informations de contact","es":"Información de contacto","it":"Informazioni di contatto","nl":"Contactgegevens","pl":"Informacje kontaktowe"},
+        "info_text":           {"en":"We're here to help with any questions about our products, services, or anything else.","de":"Wir sind hier, um bei Fragen zu unseren Produkten oder Dienstleistungen zu helfen.","fr":"Nous sommes là pour répondre à toutes vos questions.","es":"Estamos aquí para ayudar con cualquier pregunta sobre nuestros productos.","it":"Siamo qui per aiutarti con qualsiasi domanda sui nostri prodotti.","nl":"Wij zijn hier om te helpen met vragen over onze producten.","pl":"Jesteśmy tutaj, aby pomóc z wszelkimi pytaniami o nasze produkty."},
+    },
+    "footer": {
+        "built_with": {"en":"Built with passion.","de":"Mit Leidenschaft gebaut.","fr":"Construit avec passion.","es":"Construido con pasión.","it":"Costruito con passione.","nl":"Met passie gebouwd.","pl":"Zbudowane z pasją."},
+    },
+    "cart": {
+        "title":          {"en":"Shopping Cart","de":"Warenkorb","fr":"Panier","es":"Carrito de compras","it":"Carrello","nl":"Winkelwagen","pl":"Koszyk"},
+        "empty":          {"en":"Your cart is empty","de":"Ihr Warenkorb ist leer","fr":"Votre panier est vide","es":"Su carrito está vacío","it":"Il tuo carrello è vuoto","nl":"Uw winkelwagen is leeg","pl":"Twój koszyk jest pusty"},
+        "empty_btn":      {"en":"Browse Catalog","de":"Katalog durchsuchen","fr":"Parcourir le catalogue","es":"Explorar catálogo","it":"Sfoglia il catalogo","nl":"Catalogus bekijken","pl":"Przeglądaj katalog"},
+        "total":          {"en":"Total","de":"Gesamt","fr":"Total","es":"Total","it":"Totale","nl":"Totaal","pl":"Suma"},
+        "checkout":       {"en":"Proceed to Checkout","de":"Zur Kasse","fr":"Passer la commande","es":"Proceder al pago","it":"Procedi al checkout","nl":"Afrekenen","pl":"Przejdź do kasy"},
+        "close":          {"en":"Close","de":"Schließen","fr":"Fermer","es":"Cerrar","it":"Chiudi","nl":"Sluiten","pl":"Zamknij"},
+        "remove":         {"en":"Remove","de":"Entfernen","fr":"Supprimer","es":"Eliminar","it":"Rimuovi","nl":"Verwijderen","pl":"Usuń"},
+        "checkout_title": {"en":"Checkout","de":"Bestellung","fr":"Commande","es":"Pago","it":"Checkout","nl":"Afrekenen","pl":"Kasa"},
+        "order_summary":  {"en":"Order Summary","de":"Bestellübersicht","fr":"Récapitulatif","es":"Resumen del pedido","it":"Riepilogo ordine","nl":"Besteloverzicht","pl":"Podsumowanie zamówienia"},
+        "qty_col":        {"en":"Qty","de":"Anz.","fr":"Qté","es":"Cant.","it":"Qtà","nl":"Aantal","pl":"Ilość"},
+        "submit_order":   {"en":"Confirm Order","de":"Bestellung bestätigen","fr":"Confirmer la commande","es":"Confirmar pedido","it":"Conferma ordine","nl":"Bestelling bevestigen","pl":"Potwierdź zamówienie"},
+        "order_success":  {"en":"Order placed! We will contact you shortly.","de":"Bestellung aufgegeben! Wir melden uns in Kürze.","fr":"Commande passée ! Nous vous contacterons bientôt.","es":"¡Pedido realizado! Nos pondremos en contacto pronto.","it":"Ordine effettuato! Ti contatteremo a breve.","nl":"Bestelling geplaatst! We nemen snel contact op.","pl":"Zamówienie złożone! Wkrótce się skontaktujemy."},
+        "field_name":     {"en":"Full Name","de":"Vollständiger Name","fr":"Nom complet","es":"Nombre completo","it":"Nome completo","nl":"Volledige naam","pl":"Imię i nazwisko"},
+        "field_email":    {"en":"Email","de":"E-Mail","fr":"E-mail","es":"Correo electrónico","it":"Email","nl":"E-mail","pl":"E-mail"},
+        "field_phone":    {"en":"Phone","de":"Telefon","fr":"Téléphone","es":"Teléfono","it":"Telefono","nl":"Telefoon","pl":"Telefon"},
+        "field_address":  {"en":"Address","de":"Adresse","fr":"Adresse","es":"Dirección","it":"Indirizzo","nl":"Adres","pl":"Adres"},
+        "field_city":     {"en":"City","de":"Stadt","fr":"Ville","es":"Ciudad","it":"Città","nl":"Stad","pl":"Miasto"},
+        "field_zip":      {"en":"Postal Code","de":"Postleitzahl","fr":"Code postal","es":"Código postal","it":"Codice postale","nl":"Postcode","pl":"Kod pocztowy"},
+        "field_country":  {"en":"Country","de":"Land","fr":"Pays","es":"País","it":"Paese","nl":"Land","pl":"Kraj"},
+        "validation_required": {"en":"Please fill in all required fields","de":"Bitte füllen Sie alle Pflichtfelder aus","fr":"Veuillez remplir tous les champs obligatoires","es":"Complete todos los campos obligatorios","it":"Compila tutti i campi obbligatori","nl":"Vul alle verplichte velden in","pl":"Proszę wypełnić wszystkie wymagane pola"},
+        "validation_email":    {"en":"Please enter a valid email","de":"Bitte geben Sie eine gültige E-Mail ein","fr":"Veuillez entrer un e-mail valide","es":"Ingrese un correo electrónico válido","it":"Inserisci un'email valida","nl":"Voer een geldig e-mailadres in","pl":"Proszę podać prawidłowy e-mail"},
+        "btn_continue_shopping": {"en":"Continue Shopping","de":"Weiter einkaufen","fr":"Continuer les achats","es":"Seguir comprando","it":"Continua lo shopping","nl":"Verder winkelen","pl":"Kontynuuj zakupy"},
+        "add_to_cart":         {"en":"Add to Bag","de":"In den Warenkorb","fr":"Ajouter au panier","es":"Añadir al carrito","it":"Aggiungi al carrello","nl":"In winkelwagen","pl":"Dodaj do koszyka"},
+        "added_toast":         {"en":"Added to cart!","de":"In den Warenkorb gelegt!","fr":"Ajouté au panier !","es":"¡Añadido al carrito!","it":"Aggiunto al carrello!","nl":"Toegevoegd aan winkelwagen!","pl":"Dodano do koszyka!"},
+    },
+}
+
 # ── Google Fonts URL per category ──
 FONTS_URL = {
     "stores": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap",
@@ -238,9 +307,13 @@ def _stats(category: str, analysis: dict) -> list:
     return DEFAULT_STATS.get(category, DEFAULT_STATS["companies"])
 
 
-def _nav_items() -> list[tuple[str, str]]:
-    return [("about", "About"), ("features", "Features"), ("killer", "Why Us"),
+def _nav_items(category: str = "companies") -> list[tuple[str, str]]:
+    items = [("about", "About"), ("features", "Features"), ("killer", "Why Us"),
             ("how-it-works", "How It Works"), ("faq", "FAQ"), ("contact", "Contact")]
+    if category == "stores":
+        items = [("about", "About"), ("features", "Features"), ("catalog", "Catalog"),
+                ("killer", "Why Us"), ("how-it-works", "How It Works"), ("faq", "FAQ"), ("contact", "Contact")]
+    return items
 
 
 # ──────────────────────── CSS Generator (per category) ────────────────────────
@@ -1345,14 +1418,139 @@ section {{ padding: 100px 0; }}
   .killer-grid { gap: 40px; }
 }"""
 
-    return base + typo + btn + nav + hero + sections + about + features + killer + steps_css + faq_css + contact + footer + modal + animations + mobile_menu + responsive
+    # ─── Stores-only: Catalog + Cart + Checkout + Toast CSS ───
+    if category == "stores":
+        catalog_css = f"""
+.catalog {{ padding: 100px 24px; background: {bg}; }}
+.catalog-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; max-width: 1200px; margin: 0 auto; }}
+.product-card {{ background: {card}; border: 1px solid {border}; border-radius: 8px; overflow: hidden; transition: transform 0.4s cubic-bezier(0.23,1,0.32,1), box-shadow 0.4s ease; box-shadow: {t["card_shadow"]}; display: flex; flex-direction: column; }}
+.product-card:hover {{ transform: translateY(-6px); box-shadow: {t["card_shadow_hover"]}; }}
+.product-card-img {{ position: relative; background: {bg_alt}; display: flex; align-items: center; justify-content: center; }}
+.product-card-img img {{ width: 100%; height: auto; max-height: 320px; object-fit: contain; display: block; transition: transform 0.5s ease; }}
+.product-card:hover .product-card-img img {{ transform: scale(1.03); }}
+.product-card-body {{ padding: 14px 16px; flex: 1; display: flex; flex-direction: column; }}
+.product-card-name {{ font-family: {hf}; font-size: 0.9rem; font-weight: 600; color: {tp}; margin-bottom: 6px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }}
+.product-card-price {{ font-size: 1rem; font-weight: 600; color: {tp}; margin-top: auto; margin-bottom: 12px; }}
+.btn-cart {{ display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 10px 16px; border-radius: 4px; font-weight: 500; font-size: 0.8rem; cursor: pointer; border: 1.5px solid {tp}; background: transparent; color: {tp}; transition: all 0.3s ease; font-family: {bf}; letter-spacing: 0.5px; text-transform: uppercase; }}
+.btn-cart:hover {{ background: {tp}; color: #FFFBF5; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }}"""
+
+        cart_css = f"""
+.nav-actions {{ display: flex; align-items: center; gap: 16px; }}
+.nav-cart {{ position: relative; cursor: pointer; color: {ts}; background: none; border: none; padding: 8px; font-size: 1.1rem; transition: color 0.3s; }}
+.nav-cart:hover {{ color: {tp}; }}
+.nav-cart-badge {{ position: absolute; top: -6px; right: -8px; background: {accent}; color: #fff; font-size: 0.7rem; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; }}
+.cart-panel {{ position: fixed; right: 0; top: 0; bottom: 0; width: 400px; max-width: 90vw; background: {card}; box-shadow: -4px 0 30px rgba(0,0,0,0.12); z-index: 1500; transform: translateX(100%); transition: transform 0.3s ease; overflow-y: auto; }}
+.cart-panel.active {{ transform: translateX(0); }}
+.cart-header {{ padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid {border}; }}
+.cart-header h3 {{ font-family: {hf}; font-size: 1.2rem; font-weight: 600; color: {tp}; }}
+.cart-close {{ background: none; border: none; cursor: pointer; color: {ts}; font-size: 1.2rem; padding: 4px; transition: color 0.3s; }}
+.cart-close:hover {{ color: {tp}; }}
+.cart-empty {{ padding: 60px 24px; text-align: center; color: {ts}; }}
+.cart-items {{ padding: 0; }}
+.cart-item {{ display: flex; gap: 12px; padding: 16px 24px; border-bottom: 1px solid {border}; align-items: flex-start; }}
+.cart-item-img {{ width: 60px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }}
+.cart-item-info {{ flex: 1; display: flex; flex-direction: column; gap: 4px; }}
+.cart-item-name {{ font-size: 0.9rem; font-weight: 500; color: {tp}; line-height: 1.3; }}
+.cart-item-price {{ font-size: 0.85rem; color: {ts}; }}
+.cart-item-qty {{ display: flex; gap: 8px; align-items: center; margin-top: 4px; }}
+.qty-btn {{ width: 28px; height: 28px; border: 1px solid {border}; border-radius: 4px; background: {bg_alt}; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: {tp}; transition: all 0.2s; }}
+.qty-btn:hover {{ background: {accent}; color: #fff; border-color: {accent}; }}
+.cart-item-qty span {{ font-size: 0.85rem; font-weight: 600; min-width: 20px; text-align: center; color: {tp}; }}
+.cart-item-remove {{ background: none; border: none; cursor: pointer; color: {ts}; font-size: 0.9rem; padding: 4px; transition: color 0.3s; align-self: flex-start; }}
+.cart-item-remove:hover {{ color: #e74c3c; }}
+.cart-footer {{ padding: 16px 24px; border-top: 1px solid {border}; }}
+.cart-total-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-size: 1.1rem; font-weight: 600; color: {tp}; }}
+.cart-total-value {{ font-family: {hf}; }}
+.cart-overlay {{ position: fixed; inset: 0; z-index: 1499; background: rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }}
+.cart-overlay.active {{ opacity: 1; pointer-events: auto; }}"""
+
+        checkout_css = f"""
+.checkout-overlay {{ position: fixed; inset: 0; z-index: 2500; background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }}
+.checkout-overlay.active {{ opacity: 1; pointer-events: auto; }}
+.checkout-modal {{ background: {card}; border: 1px solid {border}; border-radius: 12px; padding: 36px; max-width: 520px; width: 90%; text-align: left; box-shadow: {t["modal_shadow"]}; transform: scale(0.9); transition: transform 0.3s ease; max-height: 90vh; overflow-y: auto; }}
+.checkout-overlay.active .checkout-modal {{ transform: scale(1); }}
+.checkout-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid {border}; }}
+.checkout-header h3 {{ font-family: {hf}; font-size: 1.3rem; font-weight: 600; color: {tp}; }}
+.checkout-fields {{ display: flex; flex-direction: column; gap: 16px; }}
+.checkout-field {{ display: flex; flex-direction: column; gap: 6px; }}
+.checkout-field label {{ font-size: 0.85rem; font-weight: 500; color: {tp}; }}
+.checkout-field input,
+.checkout-field select {{ width: 100%; padding: 12px 16px; border-radius: 4px; border: 1px solid {border}; background: {bg}; color: {tp}; font-size: 0.95rem; font-family: {bf}; transition: border-color 0.3s, box-shadow 0.3s; }}
+.checkout-field input:focus,
+.checkout-field select:focus {{ outline: none; border-color: {accent}; box-shadow: 0 0 0 3px rgba({rgb},0.1); }}
+.checkout-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+.checkout-summary {{ margin-top: 24px; padding-top: 16px; border-top: 1px solid {border}; }}
+.checkout-summary h4 {{ font-family: {hf}; font-size: 1rem; font-weight: 600; color: {tp}; margin-bottom: 12px; }}
+.summary-row {{ display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.9rem; color: {ts}; border-bottom: 1px solid {t["border_light"]}; }}
+.summary-total-row {{ display: flex; justify-content: space-between; padding: 12px 0; font-size: 1.05rem; font-weight: 600; color: {tp}; }}"""
+
+        toast_css = f"""
+.cart-toast {{ position: fixed; bottom: 24px; right: 24px; z-index: 3000; background: {accent}; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem; font-weight: 500; opacity: 0; transform: translateY(20px); transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none; }}
+.cart-toast.show {{ opacity: 1; transform: translateY(0); }}"""
+
+        cart_resp = """
+@media (max-width: 1024px) {
+  .catalog-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .catalog-grid { grid-template-columns: repeat(2, 1fr); }
+  .product-card-img img { max-height: 260px; }
+  .cart-panel { width: 100%; max-width: 100vw; }
+  .checkout-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .catalog-grid { grid-template-columns: 1fr; }
+  .product-card-img img { max-height: 280px; }
+}"""
+    else:
+        catalog_css = ""
+        cart_css = ""
+        checkout_css = ""
+        toast_css = ""
+        cart_resp = ""
+
+    return base + typo + btn + nav + hero + sections + about + features + killer + steps_css + faq_css + contact + footer + modal + animations + mobile_menu + catalog_css + cart_css + checkout_css + toast_css + cart_resp + responsive
 
 
 # ──────────────────────── JS Generator ────────────────────────
 
+def _i18n_js_dict() -> str:
+    """Convert I18N_STORES to a JS object string."""
+    import json
+    return json.dumps(I18N_STORES, ensure_ascii=False, indent=2)
+
+
+def _build_catalog_html(category: str, t: dict) -> str:
+    if category != "stores":
+        return ""
+    ph_bg = t["placehold_bg"]
+    ph_fg = t["placehold_fg"]
+    products = [
+        ("Premium Leather Tote", "189.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+1"),
+        ("Minimalist Watch", "245.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+2"),
+        ("Silk Scarf Collection", "129.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+3"),
+        ("Handcrafted Sunglasses", "175.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+4"),
+        ("Organic Cotton Hoodie", "149.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+5"),
+        ("Ceramic Vase Set", "95.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+6"),
+        ("Artisan Candle Trio", "68.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+7"),
+        ("Linen Throw Blanket", "119.00", f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+8"),
+    ]
+    add_btn_text = "Add to Bag"
+    return "\n".join(
+        f'        <div class="product-card fade-up">'
+        f'<div class="product-card-img"><img src="{img}" alt="{name}" loading="lazy"></div>'
+        f'<div class="product-card-body">'
+        f'<div class="product-card-name">{name}</div>'
+        f'<div class="product-card-price">€{price}</div>'
+        f'<button class="btn-cart" data-i18n="cart.add_to_cart">{add_btn_text}</button>'
+        f'</div></div>'
+        for name, price, img in products
+    )
+
+
 def _generate_js(t: dict, category: str) -> str:
     shadow_color = "0 2px 20px rgba(0,0,0,0.3)" if category == "crypto" else "0 2px 20px rgba(0,0,0,0.06)"
-    return f"""// ═══════════ Smooth Scroll ═══════════
+    js = f"""// ═══════════ Smooth Scroll ═══════════
 document.querySelectorAll('a[href^="#"]').forEach(function(a) {{
   a.addEventListener('click', function(e) {{
     e.preventDefault();
@@ -1486,6 +1684,243 @@ window.addEventListener('scroll', function() {{
   }}
 }})();"""
 
+    # ─── Stores-only: i18n + Cart + Checkout JS ───
+    if category == "stores":
+        i18n_obj = _i18n_js_dict()
+        js += f"""
+// ═══════════ i18n ═══════════
+var TRANSLATIONS = {i18n_obj};
+var currentLang = 'en';
+
+var COUNTRY_LANG_MAP = {{
+  'GB':'en','US':'en','AU':'en','CA':'en','IE':'en','NZ':'en',
+  'DE':'de','AT':'de','CH':'de','LI':'de',
+  'FR':'fr','BE':'fr','LU':'fr','MC':'fr',
+  'ES':'es','MX':'es','AR':'es','CO':'es','CL':'es',
+  'IT':'it','SM':'it',
+  'NL':'nl','BE':'nl',
+  'PL':'pl',
+}};
+
+function detectLanguage() {{
+  return fetch('https://ipapi.co/json/')
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+      if (data && data.country_code) {{
+        var lang = COUNTRY_LANG_MAP[data.country_code];
+        if (lang) {{ currentLang = lang; applyTranslations(); return; }}
+      }}
+      currentLang = 'en';
+      applyTranslations();
+    }})
+    .catch(function() {{
+      var navLang = (navigator.language || '').substring(0, 2);
+      if (COUNTRY_LANG_MAP[navLang.toUpperCase()]) {{
+        currentLang = COUNTRY_LANG_MAP[navLang.toUpperCase()];
+      }}
+      applyTranslations();
+    }});
+}}
+
+function applyTranslations() {{
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {{
+    var key = el.getAttribute('data-i18n');
+    var keys = key.split('.');
+    var obj = TRANSLATIONS;
+    for (var i = 0; i < keys.length; i++) {{
+      if (obj && obj[keys[i]] !== undefined) obj = obj[keys[i]];
+      else return;
+    }}
+    if (typeof obj === 'object' && obj[currentLang] !== undefined) {{
+      el.textContent = obj[currentLang];
+    }}
+  }});
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {{
+    var key = el.getAttribute('data-i18n-placeholder');
+    var keys = key.split('.');
+    var obj = TRANSLATIONS;
+    for (var i = 0; i < keys.length; i++) {{
+      if (obj && obj[keys[i]] !== undefined) obj = obj[keys[i]];
+      else return;
+    }}
+    if (typeof obj === 'object' && obj[currentLang] !== undefined) {{
+      el.placeholder = obj[currentLang];
+    }}
+  }});
+}}
+
+detectLanguage();
+
+// ═══════════ Cart System ═══════════
+var cartPanel = document.getElementById('cart-panel');
+var cartOverlay = document.getElementById('cart-overlay');
+var cartItemsEl = document.getElementById('cart-items');
+var cartTotalEl = document.getElementById('cart-total');
+var cartCountEl = document.getElementById('cart-count');
+var cartEmptyEl = document.getElementById('cart-empty');
+var cartFooterEl = document.getElementById('cart-footer');
+var toastEl = document.getElementById('cart-toast');
+
+function getCart() {{
+  try {{ return JSON.parse(localStorage.getItem('siteCart')) || []; }}
+  catch(e) {{ return []; }}
+}}
+function saveCart(cart) {{ localStorage.setItem('siteCart', JSON.stringify(cart)); updateCartUI(); }}
+
+function addToCart(name, price, image) {{
+  var cart = getCart();
+  var existing = cart.find(function(i) {{ return i.name === name; }});
+  if (existing) {{ existing.qty++; }}
+  else {{ cart.push({{name:name, price:price, image:image, qty:1}}); }}
+  saveCart(cart);
+  showToast();
+}}
+
+function removeFromCart(index) {{
+  var cart = getCart();
+  cart.splice(index, 1);
+  saveCart(cart);
+}}
+
+function changeQty(index, delta) {{
+  var cart = getCart();
+  cart[index].qty += delta;
+  if (cart[index].qty <= 0) cart.splice(index, 1);
+  saveCart(cart);
+}}
+
+function updateCartUI() {{
+  var cart = getCart();
+  var total = 0, count = 0;
+  cart.forEach(function(item) {{ total += item.price * item.qty; count += item.qty; }});
+  if (cartCountEl) cartCountEl.textContent = count;
+  if (cartCountEl) cartCountEl.style.display = count > 0 ? 'flex' : 'none';
+  if (cartEmptyEl) cartEmptyEl.style.display = cart.length === 0 ? 'block' : 'none';
+  if (cartFooterEl) cartFooterEl.style.display = cart.length === 0 ? 'none' : 'block';
+  if (cartTotalEl) cartTotalEl.textContent = '€' + total.toFixed(2);
+  if (cartItemsEl) {{
+    cartItemsEl.innerHTML = '';
+    cart.forEach(function(item, idx) {{
+      var div = document.createElement('div');
+      div.className = 'cart-item';
+      div.innerHTML = '<img src="'+item.image+'" alt="" class="cart-item-img">' +
+        '<div class="cart-item-info"><div class="cart-item-name">'+item.name+'</div>' +
+        '<div class="cart-item-price">€'+item.price.toFixed(2)+'</div>' +
+        '<div class="cart-item-qty"><button class="qty-btn" onclick="changeQty('+idx+',-1)">−</button>' +
+        '<span>'+item.qty+'</span><button class="qty-btn" onclick="changeQty('+idx+',1)">+</button></div></div>' +
+        '<button class="cart-item-remove" onclick="removeFromCart('+idx+')"><i class="fa-solid fa-xmark"></i></button>';
+      cartItemsEl.appendChild(div);
+    }});
+  }}
+}}
+
+function openCart() {{
+  if (cartPanel) cartPanel.classList.add('active');
+  if (cartOverlay) cartOverlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}}
+function closeCart() {{
+  if (cartPanel) cartPanel.classList.remove('active');
+  if (cartOverlay) cartOverlay.classList.remove('active');
+  document.body.style.overflow = '';
+}}
+
+function showToast() {{
+  if (toastEl) {{
+    toastEl.textContent = TRANSLATIONS.cart.added_toast[currentLang] || 'Added to cart!';
+    toastEl.classList.add('show');
+    setTimeout(function() {{ toastEl.classList.remove('show'); }}, 2000);
+  }}
+}}
+
+// Add to cart buttons
+document.querySelectorAll('.btn-cart').forEach(function(btn) {{
+  btn.addEventListener('click', function() {{
+    var card = this.closest('.product-card');
+    if (!card) return;
+    var name = card.querySelector('.product-card-name').textContent;
+    var priceText = card.querySelector('.product-card-price').textContent;
+    var price = parseFloat(priceText.replace(/[^0-9.,]/g, '').replace(',', '.'));
+    var img = card.querySelector('.product-card-img img');
+    var image = img ? img.src : '';
+    addToCart(name, price, image);
+  }});
+}});
+
+// Init cart UI
+updateCartUI();
+
+// ═══════════ Checkout ═══════════
+var checkoutOverlay = document.getElementById('checkout-overlay');
+var checkoutForm = document.getElementById('checkout-form');
+
+function openCheckout() {{
+  closeCart();
+  if (checkoutOverlay) {{
+    checkoutOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    fillOrderSummary();
+  }}
+}}
+function closeCheckout() {{
+  if (checkoutOverlay) {{
+    checkoutOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }}
+}}
+
+function fillOrderSummary() {{
+  var cart = getCart();
+  var summaryEl = document.getElementById('order-summary-items');
+  var summaryTotalEl = document.getElementById('order-summary-total');
+  if (!summaryEl) return;
+  var html = '', total = 0;
+  cart.forEach(function(item) {{
+    var sub = item.price * item.qty;
+    total += sub;
+    html += '<div class="summary-row"><span>'+item.name+' x'+item.qty+'</span><span>€'+sub.toFixed(2)+'</span></div>';
+  }});
+  summaryEl.innerHTML = html;
+  if (summaryTotalEl) summaryTotalEl.textContent = '€' + total.toFixed(2);
+}}
+
+if (checkoutForm) {{
+  checkoutForm.addEventListener('submit', function(e) {{
+    e.preventDefault();
+    var name = document.getElementById('co-name');
+    var email = document.getElementById('co-email');
+    var phone = document.getElementById('co-phone');
+    var address = document.getElementById('co-address');
+    var city = document.getElementById('co-city');
+    var zip = document.getElementById('co-zip');
+    var country = document.getElementById('co-country');
+    
+    if (!name.value || !email.value || !phone.value || !address.value || !city.value || !zip.value || !country.value) {{
+      alert(TRANSLATIONS.cart.validation_required[currentLang] || 'Please fill in all required fields');
+      return;
+    }}
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.value)) {{
+      alert(TRANSLATIONS.cart.validation_email[currentLang] || 'Please enter a valid email');
+      return;
+    }}
+    
+    // Simulate order
+    localStorage.removeItem('siteCart');
+    updateCartUI();
+    closeCheckout();
+    alert(TRANSLATIONS.cart.order_success[currentLang] || 'Order placed!');
+    checkoutForm.reset();
+  }});
+}}
+
+if (checkoutOverlay) {{
+  checkoutOverlay.addEventListener('click', function(e) {{
+    if (e.target === checkoutOverlay) closeCheckout();
+  }});
+}}"""
+
+    return js
+
 
 # ──────────────────────── HTML Generator ────────────────────────
 
@@ -1502,16 +1937,166 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     faqs = _faq(category, name, a)
     steps = _steps(category)
     stats = _stats(category, a)
-    nav_items = _nav_items()
+    nav_items = _nav_items(category)
     meta_desc = subtitle
     meta_kw = SEO_KEYWORDS.get(category, "")
     brand_icon = t["icon"]
     fonts_url = FONTS_URL.get(category, FONTS_URL["companies"])
     ph_bg = t["placehold_bg"]
     ph_fg = t["placehold_fg"]
+    is_stores = category == "stores"
 
-    nav_links_html = "\n".join(f'        <a href="#{nid}">{label}</a>' for nid, label in nav_items)
-    mobile_links_html = "\n".join(f'      <a href="#{nid}">{label}</a>' for nid, label in nav_items)
+    # Nav link i18n key mapping for stores
+    nav_i18n_map = {"about": "nav.about", "features": "nav.features", "catalog": "nav.catalog",
+                    "killer": "nav.why_us", "how-it-works": "nav.how_it_works", "faq": "nav.faq", "contact": "nav.contact"}
+    if is_stores:
+        nav_links_html = "\n".join(
+            f'        <a href="#{nid}" data-i18n="{nav_i18n_map.get(nid, "")}">{label}</a>'
+            for nid, label in nav_items)
+        mobile_links_html = "\n".join(
+            f'      <a href="#{nid}" data-i18n="{nav_i18n_map.get(nid, "")}">{label}</a>'
+            for nid, label in nav_items)
+    else:
+        nav_links_html = "\n".join(f'        <a href="#{nid}">{label}</a>' for nid, label in nav_items)
+        mobile_links_html = "\n".join(f'      <a href="#{nid}">{label}</a>' for nid, label in nav_items)
+
+    # Nav actions (cart icon + burger for stores)
+    if is_stores:
+        nav_actions_html = """\
+      <div class="nav-actions">
+        <button class="nav-cart" onclick="openCart()" aria-label="Cart">
+          <i class="fa-solid fa-bag-shopping"></i>
+          <span class="nav-cart-badge" id="cart-count" style="display:none">0</span>
+        </button>
+        <button class="burger" aria-label="Toggle menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>"""
+        burger_html = ""
+    else:
+        nav_actions_html = ""
+        burger_html = """\
+      <button class="burger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>"""
+
+    # Catalog HTML for stores
+    catalog_html = _build_catalog_html(category, t)
+    catalog_section = ""
+    if is_stores:
+        catalog_section = f"""\
+  <!-- Catalog -->
+  <section id="catalog" class="section-dark">
+    <h2 class="section-title fade-up" data-i18n="sections.catalog_title">Our Collection</h2>
+    <p class="section-subtitle fade-up" data-i18n="sections.catalog_subtitle">Discover our curated selection of premium products</p>
+    <div class="catalog-grid">
+{catalog_html}
+    </div>
+  </section>"""
+
+    # Cart / Checkout / Toast HTML for stores
+    stores_extras_html = ""
+    if is_stores:
+        stores_extras_html = """\
+  <!-- Cart Overlay -->
+  <div class="cart-overlay" id="cart-overlay" onclick="closeCart()"></div>
+  
+  <!-- Cart Panel -->
+  <div class="cart-panel" id="cart-panel">
+    <div class="cart-header">
+      <h3 data-i18n="cart.title">Shopping Cart</h3>
+      <button class="cart-close" onclick="closeCart()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="cart-empty" class="cart-empty">
+      <i class="fa-solid fa-bag-shopping" style="font-size:2rem;opacity:0.3;margin-bottom:16px;display:block"></i>
+      <p data-i18n="cart.empty">Your cart is empty</p>
+      <button class="btn btn-outline" style="margin-top:16px" onclick="closeCart();document.getElementById('catalog').scrollIntoView({behavior:'smooth'})" data-i18n="cart.empty_btn">Browse Catalog</button>
+    </div>
+    <div id="cart-items" class="cart-items"></div>
+    <div id="cart-footer" class="cart-footer" style="display:none">
+      <div class="cart-total-row">
+        <span data-i18n="cart.total">Total</span>
+        <span id="cart-total" class="cart-total-value">€0.00</span>
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="openCheckout()" data-i18n="cart.checkout">Proceed to Checkout</button>
+    </div>
+  </div>
+  
+  <!-- Toast -->
+  <div class="cart-toast" id="cart-toast"></div>
+  
+  <!-- Checkout Modal -->
+  <div class="checkout-overlay" id="checkout-overlay">
+    <div class="checkout-modal">
+      <div class="checkout-header">
+        <h3 data-i18n="cart.checkout_title">Checkout</h3>
+        <button class="cart-close" onclick="closeCheckout()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="checkout-form">
+        <div class="checkout-fields">
+          <div class="checkout-field">
+            <label data-i18n="cart.field_name">Full Name</label>
+            <input type="text" id="co-name" required>
+          </div>
+          <div class="checkout-row">
+            <div class="checkout-field">
+              <label data-i18n="cart.field_email">Email</label>
+              <input type="email" id="co-email" required>
+            </div>
+            <div class="checkout-field">
+              <label data-i18n="cart.field_phone">Phone</label>
+              <input type="tel" id="co-phone" required>
+            </div>
+          </div>
+          <div class="checkout-field">
+            <label data-i18n="cart.field_address">Address</label>
+            <input type="text" id="co-address" required>
+          </div>
+          <div class="checkout-row">
+            <div class="checkout-field">
+              <label data-i18n="cart.field_city">City</label>
+              <input type="text" id="co-city" required>
+            </div>
+            <div class="checkout-field">
+              <label data-i18n="cart.field_zip">Postal Code</label>
+              <input type="text" id="co-zip" required>
+            </div>
+          </div>
+          <div class="checkout-field">
+            <label data-i18n="cart.field_country">Country</label>
+            <select id="co-country" required>
+              <option value="">Select...</option>
+              <option value="DE">Germany</option>
+              <option value="FR">France</option>
+              <option value="IT">Italy</option>
+              <option value="ES">Spain</option>
+              <option value="NL">Netherlands</option>
+              <option value="PL">Poland</option>
+              <option value="AT">Austria</option>
+              <option value="BE">Belgium</option>
+              <option value="GB">United Kingdom</option>
+              <option value="IE">Ireland</option>
+              <option value="PT">Portugal</option>
+              <option value="SE">Sweden</option>
+              <option value="DK">Denmark</option>
+              <option value="FI">Finland</option>
+              <option value="CH">Switzerland</option>
+              <option value="LU">Luxembourg</option>
+            </select>
+          </div>
+        </div>
+        <div class="checkout-summary">
+          <h4 data-i18n="cart.order_summary">Order Summary</h4>
+          <div id="order-summary-items"></div>
+          <div class="summary-total-row">
+            <span data-i18n="cart.total">Total</span>
+            <span id="order-summary-total">€0.00</span>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:20px" data-i18n="cart.submit_order">Confirm Order</button>
+      </form>
+    </div>
+  </div>"""
 
     features_html = "\n".join(
         f"""        <div class="feature-card fade-up">
@@ -1606,9 +2191,7 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
       <div class="nav-links">
 {nav_links_html}
       </div>
-      <button class="burger" aria-label="Toggle menu">
-        <span></span><span></span><span></span>
-      </button>
+{nav_actions_html}{burger_html}
     </div>
   </nav>
   <div class="mobile-menu">
@@ -1622,8 +2205,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         <h1 class="fade-up">{name}</h1>
         <p class="hero-desc fade-up">{subtitle}</p>
         <div class="hero-cta fade-up">
-          <button class="btn btn-primary" data-scroll="features">Explore Features</button>
-          <button class="btn btn-outline" data-scroll="how-it-works">How It Works</button>
+          <button class="btn btn-primary" data-scroll="features"{' data-i18n="hero.cta_explore"' if is_stores else ''}>Explore Features</button>
+          <button class="btn btn-outline" data-scroll="how-it-works"{' data-i18n="hero.cta_how"' if is_stores else ''}>How It Works</button>
         </div>
         <div class="hero-stats fade-up">
 {stats_html}
@@ -1644,16 +2227,16 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
   <!-- About -->
   <section id="about" class="section-alt">
     <div class="container">
-      <h2 class="section-title fade-up">About {name}</h2>
-      <p class="section-subtitle fade-up">Redefining what's possible</p>
+      <h2 class="section-title fade-up"{' data-i18n="sections.about_title"' if is_stores else ''}>About {name}</h2>
+      <p class="section-subtitle fade-up"{' data-i18n="sections.about_subtitle"' if is_stores else ''}>Redefining what's possible</p>
 {about_paragraphs}
     </div>
   </section>
 
   <!-- Features -->
   <section id="features" class="section-dark">
-    <h2 class="section-title fade-up">Features</h2>
-    <p class="section-subtitle fade-up">Everything you need, nothing you don't</p>
+    <h2 class="section-title fade-up"{' data-i18n="sections.features_title"' if is_stores else ''}>Features</h2>
+    <p class="section-subtitle fade-up"{' data-i18n="sections.features_subtitle"' if is_stores else ''}>Everything you need, nothing you don't</p>
     <div class="features-grid">
 {features_html}
     </div>
@@ -1667,17 +2250,19 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
         <div class="gradient-overlay"></div>
       </div>
       <div class="killer-text fade-up">
-        <h2>Why Choose Us</h2>
+        <h2{' data-i18n="sections.why_title"' if is_stores else ''}>Why Choose Us</h2>
         <p>{killer if killer else "We deliver exceptional quality and unmatched value. Our commitment to excellence sets us apart from everything else in the market."}</p>
         <button class="btn btn-primary" data-scroll="how-it-works">Get Started</button>
       </div>
     </div>
   </section>
 
+{catalog_section}
+
   <!-- How It Works -->
   <section id="how-it-works" class="section-alt">
-    <h2 class="section-title fade-up">How It Works</h2>
-    <p class="section-subtitle fade-up">Simple steps to get started</p>
+    <h2 class="section-title fade-up"{' data-i18n="sections.steps_title"' if is_stores else ''}>How It Works</h2>
+    <p class="section-subtitle fade-up"{' data-i18n="sections.steps_subtitle"' if is_stores else ''}>Simple steps to get started</p>
     <div class="steps-container">
 {steps_html}
     </div>
@@ -1685,8 +2270,8 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
 
   <!-- FAQ -->
   <section id="faq" class="section-dark">
-    <h2 class="section-title fade-up">Frequently Asked Questions</h2>
-    <p class="section-subtitle fade-up">Got questions? We have answers</p>
+    <h2 class="section-title fade-up"{' data-i18n="sections.faq_title"' if is_stores else ''}>Frequently Asked Questions</h2>
+    <p class="section-subtitle fade-up"{' data-i18n="sections.faq_subtitle"' if is_stores else ''}>Got questions? We have answers</p>
     <div class="faq-list">
 {faq_html}
     </div>
@@ -1694,18 +2279,18 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
 
   <!-- Contact -->
   <section id="contact" class="section-alt">
-    <h2 class="section-title fade-up">Get In Touch</h2>
-    <p class="section-subtitle fade-up">We'd love to hear from you</p>
+    <h2 class="section-title fade-up"{' data-i18n="sections.contact_title"' if is_stores else ''}>Get In Touch</h2>
+    <p class="section-subtitle fade-up"{' data-i18n="sections.contact_subtitle"' if is_stores else ''}>We'd love to hear from you</p>
     <div class="contact-grid">
       <form class="contact-form fade-up" id="contact-form">
-        <input type="text" placeholder="Your Name" required>
-        <input type="email" placeholder="Email Address" required>
-        <textarea placeholder="Your Message" rows="4"></textarea>
-        <button type="submit" class="btn btn-primary">Send Message</button>
+        <input type="text" placeholder="Your Name"{' data-i18n-placeholder="contact.name_placeholder"' if is_stores else ''} required>
+        <input type="email" placeholder="Email Address"{' data-i18n-placeholder="contact.email_placeholder"' if is_stores else ''} required>
+        <textarea placeholder="Your Message"{' data-i18n-placeholder="contact.message_placeholder"' if is_stores else ''} rows="4"></textarea>
+        <button type="submit" class="btn btn-primary"{' data-i18n="contact.send_button"' if is_stores else ''}>Send Message</button>
       </form>
       <div class="contact-info fade-up">
-        <h3>Contact Info</h3>
-        <p>We're here to help with any questions about our products, services, or anything else.</p>
+        <h3{' data-i18n="contact.info_title"' if is_stores else ''}>Contact Info</h3>
+        <p{' data-i18n="contact.info_text"' if is_stores else ''}>We're here to help with any questions about our products, services, or anything else.</p>
         <div class="info-row">
           <i class="fa-solid fa-envelope"></i>
           <span>hello@{domain}</span>
@@ -1750,10 +2335,11 @@ def _generate_html(t: dict, category: str, analysis: dict, site_analysis: dict,
     </div>
     <div class="footer-bottom">
       <p>&copy; 2025 {name}. All rights reserved.</p>
-      <p>Built with passion.</p>
+      <p{' data-i18n="footer.built_with"' if is_stores else ''}>Built with passion.</p>
     </div>
   </footer>
 
+{stores_extras_html}
   <!-- Modal -->
   <div class="modal-overlay" id="modal-overlay">
     <div class="modal">
