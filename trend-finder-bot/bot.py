@@ -1453,12 +1453,13 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
                         logger.debug(f"[ParseProducts] {try_url} failed: {e}")
                         continue
 
-            # Deduplicate by image URL
+            # Deduplicate by product name (NOT image — many products share empty images)
             seen: set[str] = set()
             unique: list[dict] = []
             for p in products:
-                if p["image"] not in seen:
-                    seen.add(p["image"])
+                key = p.get("name", "").strip().lower()
+                if key and key not in seen:
+                    seen.add(key)
                     unique.append(p)
 
             # Mark every product with source URL for verification

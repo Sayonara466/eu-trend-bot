@@ -103,12 +103,12 @@ THEMES = {
 
 DEFAULT_FEATURES = {
     "stores": [
-        ("fa-solid fa-bag-shopping", "Curated Collections", "Handpicked designs that blend timeless elegance with modern trends"),
+        ("fa-solid fa-microchip", "Cutting-Edge Technology", "Latest innovations in smart home, robotics, and portable electronics"),
         ("fa-solid fa-earth-americas", "Global Shipping", "Free worldwide delivery on orders over $150 with full tracking"),
-        ("fa-solid fa-leaf", "Sustainable Materials", "Ethically sourced fabrics and eco-friendly production practices"),
-        ("fa-solid fa-gem", "Exclusive Pieces", "Limited edition items you won't find anywhere else"),
-        ("fa-solid fa-crown", "Loyalty Rewards", "Earn points on every purchase with VIP member perks"),
-        ("fa-solid fa-arrows-rotate", "Easy Returns", "30-day hassle-free returns with prepaid shipping labels"),
+        ("fa-solid fa-shield-halved", "2-Year Warranty", "Every product backed by comprehensive European warranty coverage"),
+        ("fa-solid fa-headset", "Expert Support", "Dedicated tech specialists available 24/7 for setup and troubleshooting"),
+        ("fa-solid fa-plug", "Smart Ecosystem", "Seamless integration with Matter, HomeKit, Alexa, and Google Home"),
+        ("fa-solid fa-arrows-rotate", "30-Day Returns", "Hassle-free returns with prepaid shipping labels and full refund"),
     ],
     "crypto": [
         ("fa-solid fa-shield-halved", "Military-Grade Security", "Multi-layer encryption with audited smart contracts and cold storage"),
@@ -130,11 +130,11 @@ DEFAULT_FEATURES = {
 
 DEFAULT_FAQS = {
     "stores": [
-        ("What makes {name} different?", "We combine artisanal craftsmanship with modern design, creating pieces that are both timeless and contemporary. Every item tells a story of quality and sustainability."),
-        ("Do you ship internationally?", "Yes! We offer free worldwide shipping on orders over $150. Standard delivery takes 5-7 business days, with express options available."),
-        ("What is your return policy?", "We offer a 30-day hassle-free return policy. Items must be unworn with tags attached. We provide prepaid return shipping labels."),
-        ("Are your materials sustainable?", "Absolutely. We use ethically sourced, eco-friendly materials whenever possible. Our supply chain is fully transparent and audited annually."),
-        ("How can I track my order?", "Once your order ships, you'll receive a tracking number via email. You can also track it in real-time through your account dashboard."),
+        ("What makes {name} different?", "We specialize in premium tech gadgets and smart home devices tested by our engineering team. Every product undergoes rigorous quality checks before joining our catalog."),
+        ("Do you ship internationally?", "Yes! We offer free worldwide shipping on orders over 150 EUR. Standard delivery takes 3-7 business days depending on your region, with express options available."),
+        ("What is your return policy?", "We offer a 30-day hassle-free return policy for all products in original packaging. We provide prepaid return shipping labels and full refunds within 5 business days."),
+        ("Are your products compatible with smart home systems?", "Absolutely. Most of our products support Matter, HomeKit, Alexa, and Google Home. Compatibility details are listed on each product page."),
+        ("How can I track my order?", "Once your order ships, you'll receive a tracking number via email. You can also track it in real-time through your account dashboard on our website."),
     ],
     "crypto": [
         ("What blockchain is {name} built on?", "We're built on a multi-chain architecture supporting Ethereum, Solana, and our own proprietary Layer 2 for maximum scalability and minimal fees."),
@@ -154,10 +154,10 @@ DEFAULT_FAQS = {
 
 DEFAULT_STEPS = {
     "stores": [
-        ("Browse", "Explore our curated collections and discover your perfect style"),
-        ("Select", "Choose your favorites and add them to your bag"),
-        ("Checkout", "Secure payment with multiple options"),
-        ("Receive", "Track your order in real-time and enjoy your new pieces"),
+        ("Browse", "Explore our catalog of premium tech gadgets and smart home devices"),
+        ("Select", "Choose your products and add them to your cart"),
+        ("Checkout", "Secure payment with multiple options including crypto"),
+        ("Enjoy", "Track your order in real-time and set up your new devices"),
     ],
     "crypto": [
         ("Connect", "Link your wallet in seconds with our secure connection flow"),
@@ -174,13 +174,13 @@ DEFAULT_STEPS = {
 }
 
 DEFAULT_STATS = {
-    "stores": [("10K+", "Happy Customers"), ("50+", "Countries"), ("4.9", "Avg Rating"), ("200+", "Collections")],
+    "stores": [("50K+", "Happy Customers"), ("35+", "Countries"), ("4.8", "Avg Rating"), ("500+", "Products")],
     "crypto": [("500M+", "Total Volume"), ("150K+", "Active Users"), ("99.9%", "Uptime"), ("<0.5s", "Finality")],
     "companies": [("500M+", "Users Served"), ("99.9%", "Uptime SLA"), ("150+", "Integrations"), ("24/7", "Support")],
 }
 
 SEO_KEYWORDS = {
-    "stores": "luxury fashion, sustainable clothing, designer brands, boutique online shopping",
+    "stores": "smart home devices, robot vacuums, fitness trackers, IP cameras, portable electronics, tech gadgets Europe",
     "crypto": "defi platform, crypto trading, blockchain technology, web3, decentralized finance",
     "companies": "enterprise SaaS, cloud platform, business solution, scalable infrastructure, AI-powered",
 }
@@ -1522,18 +1522,18 @@ def _i18n_js_dict() -> str:
 
 
 def _build_sample_catalog_cards(t: dict) -> str:
-    """Generate sample product cards when no real products are available."""
+    """Generate sample product cards when no real products are available (tech electronics only)."""
     ph_bg = t["placehold_bg"]
     ph_fg = t["placehold_fg"]
     products = [
-        {"name": "Premium Leather Tote", "price": "€189.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+1"},
-        {"name": "Minimalist Watch", "price": "€245.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+2"},
-        {"name": "Silk Scarf Collection", "price": "€129.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+3"},
-        {"name": "Handcrafted Sunglasses", "price": "€175.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+4"},
-        {"name": "Organic Cotton Hoodie", "price": "€149.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+5"},
-        {"name": "Ceramic Vase Set", "price": "€95.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+6"},
-        {"name": "Artisan Candle Trio", "price": "€68.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+7"},
-        {"name": "Linen Throw Blanket", "price": "€119.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+8"},
+        {"name": "Robot Vacuum Pro X1", "price": "€449.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Robot+Vacuum"},
+        {"name": "Smart Home Hub 3.0", "price": "€129.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Smart+Hub"},
+        {"name": "4K WiFi Security Camera", "price": "€189.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=IP+Camera"},
+        {"name": "Smart Fitness Watch", "price": "€249.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Smart+Watch"},
+        {"name": "Gaming Mesh Router", "price": "€329.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Mesh+Router"},
+        {"name": "Portable LED Projector", "price": "€399.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Projector"},
+        {"name": "Smart Air Fryer XL", "price": "€159.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Air+Fryer"},
+        {"name": "Power Bank 30000mAh", "price": "€79.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Power+Bank"},
     ]
     return "\n".join(
         f'      <div class="product-card fade-up">'
@@ -1729,7 +1729,7 @@ def _build_promo_html(category: str, products: list, t: dict, ph_bg: str, ph_fg:
     import random as _random
     p = _random.choice(products)  # Random product from THIS catalog
     img_src = p.get("image", "")
-    prod_name = p.get("name", "Выбранный товар")
+    prod_name = p.get("name", "Featured Product")
     price_raw = p.get("price", "")
     # Calculate discounted price (30% off)
     old_price = price_raw if price_raw else "€199.00"
@@ -1756,14 +1756,14 @@ def _build_promo_html(category: str, products: list, t: dict, ph_bg: str, ph_fg:
         <span class="promo-badge">-30%</span>
       </div>
       <div class="promo-text fade-up">
-        <h2>Акция</h2>
-        <p class="promo-subtitle">{prod_name} — по эксклюзивной цене. Только сейчас.</p>
+        <h2>Special Offer</h2>
+        <p class="promo-subtitle">{prod_name} at an exclusive price. Limited time only.</p>
         <div class="promo-prices">
           <span class="promo-old-price">{old_price}</span>
           <span class="promo-new-price">{new_price}</span>
           <span class="promo-discount">-30%</span>
         </div>
-        <button class="btn btn-primary" data-scroll="catalog">В каталог</button>
+        <button class="btn btn-primary" data-scroll="catalog">Browse Catalog</button>
       </div>
     </div>
   </section>"""
