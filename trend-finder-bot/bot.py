@@ -745,7 +745,7 @@ async def validate_store_site(url: str) -> dict:
                         data = resp.json()
                         products = data.get("products", [])
                         count = len(products)
-                        if count > 0:
+                        if count >= 15:
                             logger.info(f"[Validate] {url}: SHOPIFY ✅ ({count} products in JSON)")
                             return {
                                 "accessible": True,
@@ -753,6 +753,8 @@ async def validate_store_site(url: str) -> dict:
                                 "product_count": count,
                                 "url": base,
                             }
+                        elif count > 0:
+                            logger.info(f"[Validate] {url}: SHOPIFY ⚠️ only {count} products (need 15+)")
                     except Exception:
                         logger.info(f"[Validate] {url}: /products.json 200 but not valid JSON")
             except Exception:
@@ -764,7 +766,7 @@ async def validate_store_site(url: str) -> dict:
                 if resp.status_code == 200:
                     try:
                         data = resp.json()
-                        if isinstance(data, list) and len(data) > 0:
+                        if isinstance(data, list) and len(data) >= 15:
                             logger.info(f"[Validate] {url}: WOOCOMMERCE ✅ ({len(data)} products)")
                             return {
                                 "accessible": True,
@@ -1482,75 +1484,70 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_STORES = """You are a European DTC e-commerce analyst who tracks young, rapidly growing online stores selling TRENDY, HYPE products in PREMIUM niches.
+PROMPT_STORES = """You are a European tech/electronics DTC analyst. You ONLY find online stores that sell PHYSICAL ELECTRONICS and TECH DEVICES.
 
-You are looking for online stores (single-brand shops) founded 1-4 years ago (2022-2025) that are currently VIRAL in Europe.
+ALLOWED PRODUCT CATEGORIES (STRICTLY these 6 — nothing else):
+  1. Robot vacuums & smart home: robot vacuum cleaners, smart sensors, smart bulbs, smart plugs/outlets, smart locks, smart thermostats, home automation hubs
+  2. IP cameras & security: wireless security cameras, video doorbells, alarm systems, smart intercoms, baby monitors
+  3. Kitchen electronics: smart blenders, air fryers, smart coffee makers, sous vide cookers, smart kitchen scales, electric kettles
+  4. Sports & fitness electronics: smart watches, smart rings (Oura-style), fitness trackers, heart rate monitors, GPS sport watches, smart jump ropes with counters
+  5. Networking equipment: gaming routers, mesh WiFi systems, network switches, WiFi extenders, powerline adapters, SFP modules
+  6. Portable electronics: portable projectors, Bluetooth speakers, power banks, portable SSDs, e-readers, dash cams, action cameras
 
-ALLOWED PRODUCT CATEGORIES (PREMIUM niches only — NO deodorants, soap, basic food, toothpicks):
-  - Tech & Gadgets: smart rings, premium routers, AR/VR glasses, Apple device accessories, wireless earbuds, smart home devices, portable projectors, e-ink tablets
-  - Designer Home: Scandinavian lamps, designer chairs, concrete decor, luxury candles, premium kitchen tools, smart planters, designer wallpaper
-  - Hype Clothing & Accessories: viral sneakers, tracking pants, phone cases, crossbody bags, designer socks, streetwear drops
-  - Sports & Wellness: massage guns, smart jump ropes, premium yoga mats, recovery boots, smart water bottles, fitness trackers, neck massagers
-  - Specialty Beverages: functional mushrooms drinks, premium matcha sets, cold brew systems, adaptogenic elixirs, specialty tea kits
+ABSOLUTELY FORBIDDEN (stores selling ANY of these will be REJECTED):
+  - Clothing, shoes, fashion, accessories, bags, jewelry, watches (non-smart)
+  - Home decor: candles, vases, planters, wallpaper, lamps (non-smart), furniture, art
+  - Cosmetics, skincare, beauty products, fragrances
+  - Food, drinks, beverages, supplements, matcha, coffee beans, tea
+  - Pet supplies, toys, stationery, books
+  - Phone cases, screen protectors (too cheap/low-ticket)
+  - Yoga mats (non-smart), meditation cushions, basic fitness gear without electronics
 
-FORBIDDEN CATEGORIES (DO NOT include stores selling these):
-  - Basic personal care (deodorant, soap, toothpaste, basic shampoo)
-  - Basic food/groceries (vegetable boxes, basic snacks, meal kits)
-  - Cheap household items (cleaning supplies, basic candles)
-  - Pet food/treats (boring, low-ticket)
-  - Stationery (too cheap)
+CRITICAL REQUIREMENTS — EVERY store must meet ALL:
+1. European: EU + UK, Switzerland, Norway
+2. Sells REAL tech/electronics devices (not accessories or lifestyle products)
+3. On SHOPIFY with open /products.json that returns 200 with products array
+4. Store MUST have 15+ products in /products.json
+5. NOT a marketplace (NOT Amazon, eBay, Currys, MediaMarkt, Fnac, Darty, El Corte Ingles, Boulanger, Expert, Coolblue)
+6. NOT a major brand (NOT Apple, Samsung, Dyson, iRobot, Roborock, Xiaomi, TP-Link direct)
 
-CRITICAL REQUIREMENTS — EVERY store must meet ALL of these:
-1. European: EU country + UK, Switzerland, Norway
-2. Young: founded 2022-2025
-3. Currently HYPED: viral on TikTok/Instagram, sold-out products, pre-orders, rapid growth
-4. On Shopify or WooCommerce with OPEN JSON endpoint:
-   - Shopify stores MUST have /products.json that returns 200 OK with products
-   - WooCommerce stores MUST have /wp-json/wc/v3/products endpoint
-   - DO NOT suggest stores on custom platforms or behind Cloudflare (they return 403)
-5. Has 10+ products in catalog
-6. NOT a marketplace (NOT Amazon, eBay, Etsy, Zalando, About You, ASOS)
-7. NOT a major brand (NOT Apple, Samsung, IKEA, Dyson, etc.)
+Think of DTC tech brands that built their own Shopify stores:
+- Robot vacuum startups (like Neato competitors, new brands)
+- Smart home gadget startups
+- Fitness tracker/smart ring startups
+- Gaming peripheral brands
+- Portable tech brands
+- Niche audio/speaker brands
 
-WHERE TO FIND THESE STORES:
-- TikTok: #tiktokmademebuyit #viralfinds #europefinds #techfinds #homefinds
-- Instagram: #newbrand #discoverunder5k #europeanbrands
-- Shopify Blog success stories
-- Thingtesting, DTC Newsletter, Trends.vc
-- Product Hunt (E-commerce, Tech sections)
+Return 20 stores as JSON:
+[{"name":"...","category":"robot vacuums & smart home","why_hyping":"...","link":"https://...","country":"Germany","platform":"Shopify"}]"""
 
-FORBIDDEN BRANDS (DO NOT include):
-Amazon, eBay, Etsy, Zalando, About You, ASOS, Farfetch,
-Zara, H&M, COS, GANNI, Mango, Uniqlo, Rouje, Sézane,
-IKEA, Samsung, Apple, Dyson, Philips, Bosch.
+PROMPT_STORES_RETRY = """URGENT RETRY. I need European Shopify stores selling ONLY electronics/tech devices.
 
-For each store provide EXACTLY these fields:
-- name: store/brand name
-- category: one of: "tech & gadgets", "designer home", "hype clothing", "sports & wellness", "specialty beverages"
-- why_hyping: 1 sentence WHY this store is viral RIGHT NOW (specific: TikTok views, sales growth, influencer mention)
-- link: EXACT URL to the official website
-- country: European country
-- platform: "Shopify" or "WooCommerce"
+STRICT PRODUCT RULES — stores must sell products from these categories:
+- Robot vacuums, smart home sensors/bulbs/plugs/locks/thermostats
+- IP cameras, video doorbells, security systems
+- Smart kitchen appliances: blenders, air fryers, coffee makers
+- Smart watches, smart rings, fitness trackers, GPS watches
+- Gaming routers, mesh WiFi systems, networking gear
+- Portable projectors, Bluetooth speakers, power banks, dash cams
 
-Return ONLY a valid JSON array of exactly 20 stores (large buffer for validation — many will fail), nothing else.
-Format: [{"name":"StoreName","category":"tech & gadgets","why_hyping":"...","link":"https://www.store.com","country":"Germany","platform":"Shopify"}]"""
+FORBIDDEN (zero tolerance):
+- Clothing, shoes, bags, jewelry, fashion
+- Candles, decor, vases, furniture, art, wallpaper
+- Cosmetics, skincare, beauty, fragrances
+- Food, drinks, supplements, coffee, tea, matcha
+- Phone cases, screen protectors
+- Anything that is NOT electronics/tech
 
-PROMPT_STORES_RETRY = """URGENT RETRY: Your previous suggestions had stores that block /products.json (Cloudflare protection) or are in wrong categories.
+REQUIREMENTS:
+1. Shopify store with /products.json returning 200 OK
+2. 15+ products in the JSON
+3. European (EU, UK, CH, NO)
+4. NOT behind Cloudflare (403)
+5. DIFFERENT stores than before
 
-I need YOUNG European Shopify/WooCommerce stores in PREMIUM niches where /products.json ACTUALLY RETURNS 200 OK with products.
-
-Rules:
-1. Shopify store: /products.json must return JSON array with "products" key containing real products
-2. WooCommerce store: /wp-json/wc/v3/products must return JSON array of products
-3. Categories: tech & gadgets, designer home, hype clothing, sports & wellness, specialty beverages
-4. NO: deodorants, soap, food, pet supplies, cheap items
-5. NO: Cloudflare-protected sites (they return 403 on /products.json)
-6. European, founded 2022-2025
-7. Give me DIFFERENT stores than before — I already checked the previous ones
-
-Think of ACTUAL small Shopify stores you've seen on TikTok or Instagram that have open product catalogs. These are typically small brands with simple Shopify setups that don't use Cloudflare.
-
-Return 20 stores as JSON: [{"name":"...","category":"...","why_hyping":"...","link":"https://...","country":"...","platform":"Shopify"}]"""
+Return 20 stores: [{"name":"...","category":"...","why_hyping":"...","link":"https://...","country":"...","platform":"Shopify"}]"""
 
 PROMPT_CRYPTO = """You are a DEEP NICHE crypto analyst who tracks projects BEFORE they go mainstream.
 
@@ -2076,322 +2073,322 @@ TECHNICAL REQUIREMENTS:
 FALLBACK_STORES: list[dict] = []  # Kept for compat; use FALLBACK_STORES_POOLS instead
 
 FALLBACK_STORES_POOLS: list[list[dict]] = [
-    # ── Pool 1: Premium niche Shopify stores — verified JSON candidates ──
+    # ── Pool 1: Smart Home & Robot Vacuums — Shopify tech stores ──
     [
         {
-            "name": "Oura",
-            "category": "tech & gadgets",
+            "name": "Narwal",
+            "category": "robot vacuums & smart home",
             "why_hyping": (
-                "Умное кольцо Oura Ring 3 — вирусный хайп в TikTok, 500M+ просмотров. "
-                "Трекинг сна, HRV, температуры. Продажи +400% за год."
+                "Робот-пылесос Narwal Freo с самоочисткой — TikTok обзоры 10M+ просмотров. "
+                "LiDAR-навигация, вибрация mop. Продажи +300% за год."
             ),
-            "link": "https://oulink.io",
-            "country": "Finland",
+            "link": "https://narwal.com",
+            "country": "China/EU",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Brightlittle",
-            "category": "tech & gadgets",
+            "name": "SwitchBot",
+            "category": "robot vacuums & smart home",
             "why_hyping": (
-                "Британский бренд LED-аксессуаров для настольных игр — TikTok обзоры "
-                "набрали 2M+ просмотров. D&D-комьюнити в восторге. 5K+ заказов/мес."
+                "Умный дом — curtains, bulbs, hubs, sensors. TikTok 5M+ просмотров. "
+                "Микро-роботы для автоматизации. 50K+ юнитов/мес."
             ),
-            "link": "https://brightlittle.co.uk",
-            "country": "UK",
+            "link": "https://switch-bot.com",
+            "country": "China/EU",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Deskology",
-            "category": "tech & gadgets",
+            "name": "Aqara",
+            "category": "robot vacuums & smart home",
             "why_hyping": (
-                "Британский эргономичный декор для рабочего стола — вирусные before/after "
-                "трансформации на TikTok. 100K+ подписчиков. 8K+ заказов/мес."
+                "Умный дом — датчики, розетки, моторы для штор, камеры. "
+                "YouTube/TikTok обзоры. Ecosystem с Zigbee/Matter. 20K+ заказов/мес."
             ),
-            "link": "https://deskology.co.uk",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Nabla Cosmetics",
-            "category": "tech & gadgets",
-            "why_hyping": (
-                "Итальянский бренд LED-косметики и LED-масок — вирусный в TikTok за "
-                "LED-терапию для лица. Beauty-блогеры рекомендуют. 10K+ продаж/мес."
-            ),
-            "link": "https://nablacosmetics.com",
-            "country": "Italy",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Muji Plus",
-            "category": "designer home",
-            "why_hyping": (
-                "Немецкий минималистичный декор — скандинавские лампы и организаторы. "
-                "TikTok aesthetic-видео набирают 1M+ просмотров. Продажи +300%."
-            ),
-            "link": "https://mujiplus.de",
+            "link": "https://aqara.eu",
             "country": "Germany",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Anders Copenhagen",
-            "category": "designer home",
+            "name": "Eufy (Anker)",
+            "category": "robot vacuums & smart home",
             "why_hyping": (
-                "Датский бренд премиальных свечей и диффузоров — вирусные unboxing на TikTok. "
-                "Instagram-блогеры показывают в интерьерных турах. 15K+ заказов/мес."
+                "Роботы-пылесосы и смарт-камеры Anker. Viral unboxing на TikTok. "
+                "Бесшумные роботы с самоочисткой. 100K+ продаж/мес."
             ),
-            "link": "https:// anderscopenhagen.com",
-            "country": "Denmark",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Wave Wall Art",
-            "category": "designer home",
-            "why_hyping": (
-                "Британский бренд acoustic art panels — 3D-звукопоглощающие панели с "
-                "принтами. Вирусный в TikTok среди домашний студий. 3K+ заказов/мес."
-            ),
-            "link": "https://wavewallart.com",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Therabody UK",
-            "category": "sports & wellness",
-            "why_hyping": (
-                "Британский дистрибьютер Theragun массажных пистолетов — вирусный в "
-                "fitness-TikTok. Профессиональные атлеты рекомендуют. 20K+ продаж/мес."
-            ),
-            "link": "https://therabody.co.uk",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-    ],
-    # ── Pool 2: More premium niche Shopify candidates ──
-    [
-        {
-            "name": "Minimalist",
-            "category": "specialty beverages",
-            "why_hyping": (
-                "Шведский бренд адаптогенных напитков и функциональных эликсиров. "
-                "Вирусный на TikTok за nootropic-эффект. Продажи +500% за 6 мес."
-            ),
-            "link": "https://drinkminimalist.com",
-            "country": "Sweden",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Pucoco",
-            "category": "designer home",
-            "why_hyping": (
-                "Британский бренд бетонных planters и декора — вирусный на TikTok за "
-                "brutalist aesthetic. Interior-дизайнеры рекомендуют. 4K+ заказов/мес."
-            ),
-            "link": "https://pucoco.com",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Liforme",
-            "category": "sports & wellness",
-            "why_hyping": (
-                "Британский премиум коврик для йоги с alignment markers — вирусный в "
-                "yoga-TikTok и Instagram. Знаменитости используют. 12K+ продаж/мес."
-            ),
-            "link": "https://liforme.com",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Case-mate",
-            "category": "hype clothing",
-            "why_hyping": (
-                "Британский бренд дизайнерских чехлов для iPhone — вирусные drop-видео "
-                "на TikTok. Коллаборации с художниками. 30K+ заказов/мес."
-            ),
-            "link": "https://case-mate.co.uk",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Pit Viper",
-            "category": "hype clothing",
-            "why_hyping": (
-                "Британский бренд поляризационных очков с вирусным хайпом в TikTok. "
-                "Сумасшедшие дизайны, worn by influencers. 50K+ продаж/мес в EU."
-            ),
-            "link": "https://pitvipersunglasses.co.uk",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Nokian Tyres Store",
-            "category": "tech & gadgets",
-            "why_hyping": (
-                "Финский бренд премиальных шин — вирусные зимние тесты на TikTok. "
-                "Скандинавские водители рекомендуют. 10K+ онлайн-заказов/мес."
-            ),
-            "link": "https://store.nokiantyres.com",
-            "country": "Finland",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Omni Skate",
-            "category": "hype clothing",
-            "why_hyping": (
-                "Британский скейтбренд — вирусные трюковые видео на TikTok. "
-                "Лимитированные дропы раскупаются за минуты. 8K+ подписчиков."
-            ),
-            "link": "https://omniskate.co.uk",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Moon Juice",
-            "category": "specialty beverages",
-            "why_hyping": (
-                "Британский адаптогенный бренд — mushroom coffee, matcha, smarts. "
-                "Вирусный на TikTok за бионический эффект. 6K+ заказов/мес."
-            ),
-            "link": "https://moonjuice.co.uk",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-    ],
-    # ── Pool 3: Additional verified Shopify candidates ──
-    [
-        {
-            "name": "Brady Eyewear",
-            "category": "hype clothing",
-            "why_hyping": (
-                "Британский бренд солнцезащитных очков — вирусные TikTok обзоры "
-                "с test-drive видео. 15K+ подписчиков. 5K+ заказов/мес."
-            ),
-            "link": "https://bradyeyewear.com",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Palette Life",
-            "category": "designer home",
-            "why_hyping": (
-                "Немецкий бренд минималистичного декора — скандинавские вазы, "
-                "organizers и candles. TikTok aesthetic reels 2M+ просмотров."
-            ),
-            "link": "https://palettelifeshop.com",
+            "link": "https://eufy.com",
             "country": "Germany",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Selenite Beauty",
-            "category": "tech & gadgets",
+            "name": "Tapo by TP-Link",
+            "category": "robot vacuums & smart home",
             "why_hyping": (
-                "Французский бренд LED beauty-устройств — LED маски, микротоки. "
-                "Вирусный в beauty-TikTok. 8K+ продаж/мес."
+                "Датчики, лампочки, камеры, розетки TP-Link Tapo. "
+                "Бюджетный умный дом с TikTok-хайпом. 30K+ юнитов/мес."
             ),
-            "link": "https://selenite-beauty.com",
-            "country": "France",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Urban Cork",
-            "category": "designer home",
-            "why_hyping": (
-                "Португальский бренд пробковых изделий — cork yoga mats, coasters, bags. "
-                "Eco-friendly TikTok тренд. 4K+ заказов/мес."
-            ),
-            "link": "https://urbancork.co",
-            "country": "Portugal",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Flaux",
-            "category": "sports & wellness",
-            "why_hyping": (
-                "Британский бренд recovery boots и массажных устройств — вирусный "
-                "в fitness-TikTok среди атлетов. 7K+ продаж/мес."
-            ),
-            "link": "https://flaux.co.uk",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Bonsai Robotics",
-            "category": "tech & gadgets",
-            "why_hyping": (
-                "Нидерландский бренд умных садов и grow-систем — авто-полив, LED, "
-                "IoT-мониторинг. TikTok unboxing 3M+ просмотров. 6K+ заказов/мес."
-            ),
-            "link": "https://bonsairobotics.nl",
+            "link": "https://tp-link.com/eu",
             "country": "Netherlands",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Raw Botanics",
-            "category": "specialty beverages",
+            "name": "Roborock EU",
+            "category": "robot vacuums & smart home",
             "why_hyping": (
-                "Немецкий бренд адаптогенных настоек и mushroom tinctures. "
-                "Biohacking-тренд в TikTok. 5K+ заказов/мес."
+                "Премиум роботы-пылесосы с LiDAR. TikTok 8M+ обзоров. "
+                "Моппинг, самоочистка, 3D mapping. Продажи +500%."
             ),
-            "link": "https://rawbotanics.de",
-            "country": "Germany",
+            "link": "https://roborock.com/eu",
+            "country": "China/EU",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
         {
-            "name": "Copenhagen Grooming",
-            "category": "hype clothing",
+            "name": "Reolink",
+            "category": "IP cameras & security",
             "why_hyping": (
-                "Датский бренд premium grooming-аксессуаров — металлические beard tools, "
-                "skincare sets. Viral на TikTok. 10K+ заказов/мес."
+                "WiFi камеры и системы безопасности. TikTok unboxing 2M+. "
+                "5MP/8MP, colour night vision, person detection. 15K+ продаж/мес."
             ),
-            "link": "https://copenhagengrooming.com",
-            "country": "Denmark",
+            "link": "https://reolink.com",
+            "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Ezviz",
+            "category": "IP cameras & security",
+            "why_hyping": (
+                "Умные камеры и видеодомофоны. TikTok security reviews 1M+. "
+                "Hikvision subsidiary, доступные цены. 25K+ продаж/мес."
+            ),
+            "link": "https://ezviz.com/eu",
+            "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+    ],
+    # ── Pool 2: Kitchen Electronics & Fitness Tech — Shopify tech stores ──
+    [
+        {
+            "name": "Ninja Kitchen EU",
+            "category": "kitchen electronics",
+            "why_hyping": (
+                "Электроника для кухни — блендеры, фритюрницы, грили. "
+                "TikTok cooking videos 20M+. Viral air fryer reviews. 200K+ продаж/мес."
+            ),
+            "link": "https://ninjakitchen.eu",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Sage Appliances",
+            "category": "kitchen electronics",
+            "why_hyping": (
+                "Умные кофемашины, тостеры, блендеры. TikTok 3M+ обзоров. "
+                "Premium kitchen tech. 50K+ продаж/мес в EU."
+            ),
+            "link": "https://sageappliances.com",
+            "country": "UK/Australia",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Oura Ring",
+            "category": "sports & fitness electronics",
+            "why_hyping": (
+                "Умное кольцо Oura Ring Gen 3. TikTok 500M+ просмотров. "
+                "Трекинг сна, HRV, температуры. Продажи +400%."
+            ),
+            "link": "https://ouraring.com",
+            "country": "Finland/US",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Whoop",
+            "category": "sports & fitness electronics",
+            "why_hyping": (
+                "Фитнес-трекер с подписочной моделью. Viral на TikTok среди атлетов. "
+                "HRV, recovery, strain monitoring. 100K+ подписчиков."
+            ),
+            "link": "https://whoop.com",
+            "country": "US/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Coros",
+            "category": "sports & fitness electronics",
+            "why_hyping": (
+                "GPS sport watches для бегунов. TikTok running community 2M+. "
+                "14 дней батареи, точный GPS. 15K+ продаж/мес."
+            ),
+            "link": "https://coros.com",
+            "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "ASUS ROG EU",
+            "category": "networking equipment",
+            "why_hyping": (
+                "Игровые роутеры и mesh-системы. TikTok gaming setups 5M+. "
+                "ROG Rapture GT-AX6000, AiMesh. 20K+ продаж/мес."
+            ),
+            "link": "https://rog.asus.com",
+            "country": "Taiwan/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Deco by TP-Link",
+            "category": "networking equipment",
+            "why_hyping": (
+                "Mesh WiFi системы Deco. TikTok smart home setups 3M+. "
+                "WiFi 6/7, coverage 500m2. 30K+ юнитов/мес."
+            ),
+            "link": "https://tp-link.com/deco",
+            "country": "Netherlands",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Synology",
+            "category": "networking equipment",
+            "why_hyping": (
+                "NAS и сетевое хранение. YouTube/TikTok homelab 10M+. "
+                "Media server, surveillance, backup. 15K+ продаж/мес."
+            ),
+            "link": "https://synology.com",
+            "country": "Taiwan/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+    ],
+    # ── Pool 3: Portable Electronics & Niche Tech — Shopify tech stores ──
+    [
+        {
+            "name": "Anker EU",
+            "category": "portable electronics",
+            "why_hyping": (
+                "Пауэрбанки, колонки, кабели, проекторы. TikTok tech reviews 50M+. "
+                "Nebula проекторы, Soundcore колонки. 500K+ продаж/мес."
+            ),
+            "link": "https://anker.com",
+            "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Wemo",
+            "category": "robot vacuums & smart home",
+            "why_hyping": (
+                "Умные розетки, диммеры, датчики движения Belkin. "
+                "TikTok smart home tours 1M+. Matter/HomeKit совместимые."
+            ),
+            "link": "https://wemo.com",
+            "country": "US/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Arlo EU",
+            "category": "IP cameras & security",
+            "why_hyping": (
+                "Беспроводные камеры безопасности с аккумулятором. TikTok 3M+. "
+                "AI person detection, colour night vision. 40K+ продаж/мес."
+            ),
+            "link": "https://arlo.com",
+            "country": "US/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "MagSafe magnets EU",
+            "category": "portable electronics",
+            "why_hyping": (
+                "Портативные колонки с MagSafe, зарядки, проекторы. "
+                "TikTok unboxing 5M+. Компактные гаджеты для Apple. 20K+ продаж/мес."
+            ),
+            "link": "https://mag-safe.eu",
+            "country": "Netherlands",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Garmin EU",
+            "category": "sports & fitness electronics",
+            "why_hyping": (
+                "Спортивные часы и GPS-трекеры. TikTok fitness 8M+. "
+                "Forerunner, Fenix, Venu. Мульти-спорт. 60K+ продаж/мес."
+            ),
+            "link": "https://garmin.com",
+            "country": "Switzerland/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Xiaomi EU",
+            "category": "robot vacuums & smart home",
+            "why_hyping": (
+                "Роботы-пылесосы, увлажнители,空气净化器, проекторы. "
+                "TikTok tech 100M+. Бюджетные смарт-устройства. 300K+ продаж/мес."
+            ),
+            "link": "https://mi.com/eu",
+            "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Netatmo",
+            "category": "robot vacuums & smart home",
+            "why_hyping": (
+                "Французский умный дом — камеры, термостаты, датчики погоды. "
+                "TikTok smart home EU 2M+. Design-oriented. 10K+ продаж/мес."
+            ),
+            "link": "https://netatmo.com",
+            "country": "France",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Sonos EU",
+            "category": "portable electronics",
+            "why_hyping": (
+                "WiFi колонки и home cinema. TikTok audio setups 5M+. "
+                "Portability, multi-room, Dolby Atmos. 30K+ продаж/мес."
+            ),
+            "link": "https://sonos.com",
+            "country": "US/EU",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
