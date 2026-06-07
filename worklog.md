@@ -45,3 +45,27 @@ Stage Summary:
 - Render deploy dep-d8hcmjddt1ts738aa0kg triggered (build_in_progress)
 - Files changed: site_generator.py (+470 lines), bot.py (+154 lines), requirements.txt (+2 deps)
 ---
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix Russian text in generated sites + tech-only defaults + product dedup bug fix (v15.2)
+
+Work Log:
+- Scanned site_generator.py for all Russian/Cyrillic text → found 4 strings in _build_promo_html (lines 1732, 1759, 1760, 1766)
+- Replaced all Russian with English: "Выбранный товар" → "Featured Product", "Акция" → "Special Offer", etc.
+- Replaced fashion sample catalog products (leather totes, silk scarves, ceramic vases) with tech electronics (robot vacuums, smart hubs, IP cameras, smart watches, mesh routers, projectors, air fryers, power banks)
+- Updated DEFAULT_FEATURES for stores: from fashion/lifestyle (sustainable materials, curated collections) to tech (cutting-edge technology, smart ecosystem, expert support, 2-year warranty)
+- Updated DEFAULT_FAQS for stores: from fashion materials to tech compatibility (Matter, HomeKit, Alexa, Google Home)
+- Updated DEFAULT_STEPS for stores: from fashion shopping to tech buying flow
+- Updated DEFAULT_STATS for stores: tech-relevant metrics
+- Updated SEO_KEYWORDS: from luxury fashion to smart home/tech gadgets
+- Fixed critical product dedup bug in bot.py parse_store_products(): changed from image-based dedup (which collapsed all products with empty images to 1) to name-based dedup
+- Verified zero Cyrillic characters remain in site_generator.py
+- Committed as v15.2, pushed to GitHub, deployed to Render (deploy dep-d8inapurnols73bu8iqg)
+
+Stage Summary:
+- All generated site content is now EN/DE/FR/ES/IT only (zero Russian)
+- Sample/placeholder products are tech electronics only
+- Store defaults (features, FAQs, steps, stats, SEO) are tech-oriented
+- Product dedup bug fixed — products with missing images no longer get collapsed to 1 item
+- Deployed to Render, build in progress
