@@ -103,12 +103,12 @@ THEMES = {
 
 DEFAULT_FEATURES = {
     "stores": [
-        ("fa-solid fa-microchip", "Cutting-Edge Technology", "Latest innovations in smart home, robotics, and portable electronics"),
-        ("fa-solid fa-earth-americas", "Global Shipping", "Free worldwide delivery on orders over $150 with full tracking"),
-        ("fa-solid fa-shield-halved", "2-Year Warranty", "Every product backed by comprehensive European warranty coverage"),
-        ("fa-solid fa-headset", "Expert Support", "Dedicated tech specialists available 24/7 for setup and troubleshooting"),
-        ("fa-solid fa-plug", "Smart Ecosystem", "Seamless integration with Matter, HomeKit, Alexa, and Google Home"),
-        ("fa-solid fa-arrows-rotate", "30-Day Returns", "Hassle-free returns with prepaid shipping labels and full refund"),
+        ("fa-solid fa-star", "Premium Quality", "Every product carefully selected and quality-tested before joining our collection"),
+        ("fa-solid fa-earth-americas", "Global Shipping", "Free worldwide delivery on orders over 150 EUR with full tracking"),
+        ("fa-solid fa-shield-halved", "Secure Shopping", "Protected payments and encrypted checkout with industry-standard SSL"),
+        ("fa-solid fa-headset", "Dedicated Support", "Friendly customer service team ready to help 24/7 with any questions"),
+        ("fa-solid fa-arrow-rotate-left", "Easy Returns", "30-day hassle-free returns with prepaid shipping labels and full refund"),
+        ("fa-solid fa-heart", "Loved by Thousands", "Trusted by 50K+ customers across Europe with 4.8 average rating"),
     ],
     "crypto": [
         ("fa-solid fa-shield-halved", "Military-Grade Security", "Multi-layer encryption with audited smart contracts and cold storage"),
@@ -130,11 +130,11 @@ DEFAULT_FEATURES = {
 
 DEFAULT_FAQS = {
     "stores": [
-        ("What makes {name} different?", "We specialize in premium tech gadgets and smart home devices tested by our engineering team. Every product undergoes rigorous quality checks before joining our catalog."),
+        ("What makes {name} different?", "We curate only the finest products, rigorously testing each item for quality and durability. Every piece in our collection meets our high standards before reaching you."),
         ("Do you ship internationally?", "Yes! We offer free worldwide shipping on orders over 150 EUR. Standard delivery takes 3-7 business days depending on your region, with express options available."),
-        ("What is your return policy?", "We offer a 30-day hassle-free return policy for all products in original packaging. We provide prepaid return shipping labels and full refunds within 5 business days."),
-        ("Are your products compatible with smart home systems?", "Absolutely. Most of our products support Matter, HomeKit, Alexa, and Google Home. Compatibility details are listed on each product page."),
-        ("How can I track my order?", "Once your order ships, you'll receive a tracking number via email. You can also track it in real-time through your account dashboard on our website."),
+        ("What is your return policy?", "We offer a 30-day hassle-free return policy for all products in original condition. We provide prepaid return shipping labels and process full refunds within 5 business days."),
+        ("How do I know the product is genuine?", "Every product comes with authenticity documentation and is sourced directly from verified suppliers. We stand behind everything we sell."),
+        ("How can I track my order?", "Once your order ships, you will receive a tracking number via email. You can also track your order in real-time through your account dashboard."),
     ],
     "crypto": [
         ("What blockchain is {name} built on?", "We're built on a multi-chain architecture supporting Ethereum, Solana, and our own proprietary Layer 2 for maximum scalability and minimal fees."),
@@ -154,10 +154,10 @@ DEFAULT_FAQS = {
 
 DEFAULT_STEPS = {
     "stores": [
-        ("Browse", "Explore our catalog of premium tech gadgets and smart home devices"),
-        ("Select", "Choose your products and add them to your cart"),
-        ("Checkout", "Secure payment with multiple options including crypto"),
-        ("Enjoy", "Track your order in real-time and set up your new devices"),
+        ("Browse", "Explore our curated collection and discover products you will love"),
+        ("Select", "Choose your favorites and add them to your cart"),
+        ("Checkout", "Secure payment with multiple options including card and digital wallets"),
+        ("Enjoy", "Track your order in real-time and enjoy your new products"),
     ],
     "crypto": [
         ("Connect", "Link your wallet in seconds with our secure connection flow"),
@@ -180,7 +180,7 @@ DEFAULT_STATS = {
 }
 
 SEO_KEYWORDS = {
-    "stores": "smart home devices, robot vacuums, fitness trackers, IP cameras, portable electronics, tech gadgets Europe",
+    "stores": "smart home devices, premium fashion, home decor, fitness electronics, portable gadgets, European DTC brands",
     "crypto": "defi platform, crypto trading, blockchain technology, web3, decentralized finance",
     "companies": "enterprise SaaS, cloud platform, business solution, scalable infrastructure, AI-powered",
 }
@@ -1522,18 +1522,18 @@ def _i18n_js_dict() -> str:
 
 
 def _build_sample_catalog_cards(t: dict) -> str:
-    """Generate sample product cards when no real products are available (tech electronics only)."""
+    """Generate sample product cards when no real products are available (generic/diverse)."""
     ph_bg = t["placehold_bg"]
     ph_fg = t["placehold_fg"]
     products = [
-        {"name": "Robot Vacuum Pro X1", "price": "€449.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Robot+Vacuum"},
-        {"name": "Smart Home Hub 3.0", "price": "€129.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Smart+Hub"},
-        {"name": "4K WiFi Security Camera", "price": "€189.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=IP+Camera"},
-        {"name": "Smart Fitness Watch", "price": "€249.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Smart+Watch"},
-        {"name": "Gaming Mesh Router", "price": "€329.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Mesh+Router"},
-        {"name": "Portable LED Projector", "price": "€399.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Projector"},
-        {"name": "Smart Air Fryer XL", "price": "€159.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Air+Fryer"},
-        {"name": "Power Bank 30000mAh", "price": "€79.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Power+Bank"},
+        {"name": "Premium Collection Item", "price": "€89.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+1"},
+        {"name": "Bestseller Essential", "price": "€59.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+2"},
+        {"name": "Limited Edition", "price": "€129.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+3"},
+        {"name": "New Arrival", "price": "€79.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+4"},
+        {"name": "Customer Favorite", "price": "€99.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+5"},
+        {"name": "Exclusive Release", "price": "€149.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+6"},
+        {"name": "Staff Pick", "price": "€69.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+7"},
+        {"name": "Trending Now", "price": "€109.00", "image": f"https://placehold.co/400x400/{ph_bg}/{ph_fg}?text=Product+8"},
     ]
     return "\n".join(
         f'      <div class="product-card fade-up">'

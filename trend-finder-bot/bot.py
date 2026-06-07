@@ -745,7 +745,7 @@ async def validate_store_site(url: str) -> dict:
                         data = resp.json()
                         products = data.get("products", [])
                         count = len(products)
-                        if count >= 15:
+                        if count >= 20:
                             logger.info(f"[Validate] {url}: SHOPIFY ✅ ({count} products in JSON)")
                             return {
                                 "accessible": True,
@@ -754,7 +754,7 @@ async def validate_store_site(url: str) -> dict:
                                 "url": base,
                             }
                         elif count > 0:
-                            logger.info(f"[Validate] {url}: SHOPIFY ⚠️ only {count} products (need 15+)")
+                            logger.info(f"[Validate] {url}: SHOPIFY ⚠️ only {count} products (need 20+)")
                     except Exception:
                         logger.info(f"[Validate] {url}: /products.json 200 but not valid JSON")
             except Exception:
@@ -766,7 +766,7 @@ async def validate_store_site(url: str) -> dict:
                 if resp.status_code == 200:
                     try:
                         data = resp.json()
-                        if isinstance(data, list) and len(data) >= 15:
+                        if isinstance(data, list) and len(data) >= 20:
                             logger.info(f"[Validate] {url}: WOOCOMMERCE ✅ ({len(data)} products)")
                             return {
                                 "accessible": True,
@@ -820,25 +820,57 @@ async def _validate_batch(items: list[dict], checked_urls: set[str]) -> list[dic
 
 
 async def search_stores_deep() -> list[dict]:
-    """Search for young, parseable Shopify/WooCommerce DTC stores in PREMIUM niches.
+    """Search for young, parseable Shopify/WooCommerce DTC stores across 7+ DIVERSE categories.
 
-    HARD RULE: Only stores with VERIFIED JSON product access are shown to user.
-    MINIMUM: Do NOT return fewer than 6 verified stores unless all options exhausted.
+    HARD RULES:
+      - Only stores with VERIFIED JSON product access (20+ products)
+      - 7 stores from 7 DIFFERENT categories — no category repeats
+      - MIN_STORES = 7 unique-category stores before returning
 
     Flow:
-    1. Ask AI for 20 young European DTC stores (30s timeout)
-    2. VALIDATE each: check /products.json or /wp-json/wc/v3/products
-    3. KEEP ONLY stores with 200 OK + actual products in JSON
-    4. If <6 verified → retry AI up to 5 more times (each with 20 new stores)
-    5. Each retry uses BOTH OpenRouter and Gemini in parallel
-    6. If still <6 → validate ALL fallback pools until we have 6+
+    1. Ask AI for 20 young European DTC stores across diverse categories
+    2. VALIDATE each: check /products.json or /wp-json/wc/v3/products (20+ products)
+    3. DEDUP by category: keep at most 1 store per category
+    4. If <7 unique-category verified → retry AI up to 5 times
+    5. Each retry tells AI which categories are already covered
+    6. If still <7 → validate ALL fallback pools
     7. Only return whatever we have if ALL options truly exhausted
     """
-    MIN_STORES = 6
+    MIN_STORES = 7
     MAX_STORES = 10
     MAX_RETRIES = 5
     verified_items: list[dict] = []
     checked_urls: set[str] = set()
+
+    # ═══════════════════════════════════════════════════════
+    # Helper: dedup by category (keep first per category)
+    # ═══════════════════════════════════════════════════════
+    def _dedup_by_category(items: list[dict]) -> list[dict]:
+        seen_cats: dict[str, dict] = {}
+        for item in items:
+            cat = (item.get("category", "") or "").strip().lower()
+            if not cat:
+                cat = "unknown"
+            if cat not in seen_cats:
+                seen_cats[cat] = item
+        return list(seen_cats.values())
+
+    def _count_unique_categories(items: list[dict]) -> int:
+        cats = {(i.get("category", "") or "").strip().lower() or "unknown" for i in items}
+        return len(cats)
+
+    def _get_existing_categories() -> str:
+        """Get comma-separated list of categories already found (for retry prompt)."""
+        cats = set()
+        for item in verified_items:
+            cat = (item.get("category", "") or "").strip()
+            if cat:
+                cats.add(cat)
+        return ", ".join(sorted(cats)) if cats else "none yet"
+
+    def _has_category(cat: str) -> bool:
+        existing = {(i.get("category", "") or "").strip().lower() or "unknown" for i in verified_items}
+        return cat.strip().lower() in existing
 
     # ═══════════════════════════════════════════════════════
     # ROUND 1: Initial AI call (20 stores)
@@ -849,38 +881,47 @@ async def search_stores_deep() -> list[dict]:
             valid = [i for i in items if i.get("name") and i.get("link")]
             if valid:
                 logger.info(f"[StoresSearch] ROUND 1: AI returned {len(valid)} stores, validating...")
-                verified_items.extend(await _validate_batch(valid, checked_urls))
+                new_verified = await _validate_batch(valid, checked_urls)
+                verified_items.extend(new_verified)
+                # Dedup by category immediately
+                verified_items = _dedup_by_category(verified_items)
+                logger.info(f"[StoresSearch] ROUND 1: {len(verified_items)} unique-category verified, {_count_unique_categories(verified_items)} categories")
     except asyncio.TimeoutError:
         logger.warning("[StoresSearch] ROUND 1: AI timed out")
     except Exception as e:
         logger.warning(f"[StoresSearch] ROUND 1: AI error: {e}")
 
-    if len(verified_items) >= MIN_STORES:
-        logger.info(f"[StoresSearch] ROUND 1 done: {len(verified_items)} verified ✅")
+    if _count_unique_categories(verified_items) >= MIN_STORES:
+        logger.info(f"[StoresSearch] ROUND 1 done: {len(verified_items)} verified across {_count_unique_categories(verified_items)} categories ✅")
         return verified_items[:MAX_STORES]
 
     # ═══════════════════════════════════════════════════════
     # ROUNDS 2-6: Aggressive retries — OpenRouter + Gemini in parallel
     # ═══════════════════════════════════════════════════════
     for attempt in range(MAX_RETRIES):
-        if len(verified_items) >= MIN_STORES:
+        if _count_unique_categories(verified_items) >= MIN_STORES:
             break
 
+        existing_cats_str = _get_existing_categories()
         logger.info(
             f"[StoresSearch] RETRY {attempt+1}/{MAX_RETRIES}: "
-            f"{len(verified_items)}/{MIN_STORES} verified, trying OpenRouter + Gemini..."
+            f"{_count_unique_categories(verified_items)}/{MIN_STORES} categories, "
+            f"already have: {existing_cats_str}"
         )
 
+        # Build retry prompt with existing categories
+        retry_prompt = PROMPT_STORES_RETRY.format(existing_categories=existing_cats_str)
+
         # Run OpenRouter AND Gemini in parallel for different stores
-        async def _fetch_or() -> list:
+        async def _fetch_or(prompt=retry_prompt) -> list:
             try:
-                return await asyncio.wait_for(ask_ai_list(PROMPT_STORES_RETRY), timeout=30)
+                return await asyncio.wait_for(ask_ai_list(prompt), timeout=30)
             except Exception:
                 return []
 
-        async def _fetch_gem() -> list:
+        async def _fetch_gem(prompt=retry_prompt) -> list:
             try:
-                result = await asyncio.wait_for(ask_gemini(PROMPT_STORES_RETRY), timeout=40)
+                result = await asyncio.wait_for(ask_gemini(prompt), timeout=40)
                 if result:
                     return _extract_json_list(result)
             except Exception:
@@ -893,33 +934,44 @@ async def search_stores_deep() -> list[dict]:
         if combined:
             logger.info(f"[StoresSearch] RETRY {attempt+1}: got {len(or_items)} OR + {len(gem_items)} Gemini stores")
             new_verified = await _validate_batch(combined, checked_urls)
-            verified_items.extend(new_verified)
+            # Only add stores from NEW categories we don't have yet
+            for item in new_verified:
+                cat = (item.get("category", "") or "").strip().lower() or "unknown"
+                if not _has_category(cat):
+                    verified_items.append(item)
+            # Re-dedup
+            verified_items = _dedup_by_category(verified_items)
+            logger.info(f"[StoresSearch] RETRY {attempt+1}: now {_count_unique_categories(verified_items)} unique categories")
         else:
             logger.info(f"[StoresSearch] RETRY {attempt+1}: AI returned nothing")
 
-        if len(verified_items) >= MIN_STORES:
+        if _count_unique_categories(verified_items) >= MIN_STORES:
             break
 
-    if len(verified_items) >= MIN_STORES:
-        logger.info(f"[StoresSearch] After {MAX_RETRIES} retries: {len(verified_items)} verified ✅")
+    if _count_unique_categories(verified_items) >= MIN_STORES:
+        logger.info(f"[StoresSearch] After {MAX_RETRIES} retries: {len(verified_items)} verified across {_count_unique_categories(verified_items)} categories ✅")
         return verified_items[:MAX_STORES]
 
     # ═══════════════════════════════════════════════════════
-    # FINAL: Validate ALL fallback pools until we hit 6+
+    # FINAL: Validate ALL fallback pools until we hit 7+ unique categories
     # ═══════════════════════════════════════════════════════
     logger.warning(
-        f"[StoresSearch] AI gave only {len(verified_items)} verified, "
+        f"[StoresSearch] AI gave {len(verified_items)} verified across {_count_unique_categories(verified_items)} categories, "
         f"validating ALL fallback pools..."
     )
     fallback_verified = await _get_validated_fallback_stores()
-    # Merge, dedup by URL
+    # Merge, dedup by URL AND category
     fallback_urls = {i.get("link", "").strip() for i in verified_items}
     for item in fallback_verified:
-        if item.get("link", "").strip() not in fallback_urls:
+        url = item.get("link", "").strip()
+        cat = (item.get("category", "") or "").strip().lower() or "unknown"
+        if url not in fallback_urls and not _has_category(cat):
             verified_items.append(item)
-            fallback_urls.add(item.get("link", "").strip())
+            fallback_urls.add(url)
 
-    logger.info(f"[StoresSearch] FINAL: {len(verified_items)} verified (AI + fallback)")
+    # Final dedup by category
+    verified_items = _dedup_by_category(verified_items)
+    logger.info(f"[StoresSearch] FINAL: {len(verified_items)} verified across {_count_unique_categories(verified_items)} categories")
     return verified_items[:MAX_STORES]
 
 
@@ -1485,68 +1537,63 @@ async def parse_store_products(url: str, desc: str = "", name: str = "") -> list
 # AI PROMPTS — TREND SEARCH
 # ═══════════════════════════════════════════════════════════════════
 
-PROMPT_STORES = """You are a European tech/electronics DTC analyst. You ONLY find online stores that sell PHYSICAL ELECTRONICS and TECH DEVICES.
+PROMPT_STORES = """You are a European DTC e-commerce analyst. Find 20 young, trending Shopify stores across 7 DIFFERENT product categories.
 
-ALLOWED PRODUCT CATEGORIES (STRICTLY these 6 — nothing else):
-  1. Robot vacuums & smart home: robot vacuum cleaners, smart sensors, smart bulbs, smart plugs/outlets, smart locks, smart thermostats, home automation hubs
-  2. IP cameras & security: wireless security cameras, video doorbells, alarm systems, smart intercoms, baby monitors
-  3. Kitchen electronics: smart blenders, air fryers, smart coffee makers, sous vide cookers, smart kitchen scales, electric kettles
-  4. Sports & fitness electronics: smart watches, smart rings (Oura-style), fitness trackers, heart rate monitors, GPS sport watches, smart jump ropes with counters
-  5. Networking equipment: gaming routers, mesh WiFi systems, network switches, WiFi extenders, powerline adapters, SFP modules
-  6. Portable electronics: portable projectors, Bluetooth speakers, power banks, portable SSDs, e-readers, dash cams, action cameras
+DIVERSITY RULE — I need stores from these 7+ distinct categories (at least 3 stores per category):
+  1. Home decor & tableware: scandinavian decor, candles, vases, ceramics, kitchenware, linen, wall art, planters
+  2. Fashion & clothing: young European DTC brands — streetwear, minimalist fashion, sustainable clothing, swimwear, lingerie
+  3. Robot vacuums & smart home: robot vacuum cleaners, smart sensors, smart bulbs, smart plugs, smart locks, thermostats
+  4. IP cameras & security systems: wireless security cameras, video doorbells, alarm systems, smart intercoms, baby monitors
+  5. Sports & fitness electronics: smart watches, smart rings, fitness trackers, heart rate monitors, GPS sport watches
+  6. Kitchen electronics & gadgets: smart blenders, air fryers, coffee makers, sous vide cookers, smart kitchen scales
+  7. Portable tech & gadgets: portable projectors, Bluetooth speakers, power banks, portable SSDs, dash cams, action cameras
+  8. Beauty & skincare: indie cosmetics, natural skincare, hair tools, fragrances (DTC brands, NOT Sephora)
+  9. Pet supplies: smart pet feeders, pet cameras, designer pet accessories
+  10. Bags & accessories: backpacks, laptop bags, wallets, sunglasses (DTC brands)
 
-ABSOLUTELY FORBIDDEN (stores selling ANY of these will be REJECTED):
-  - Clothing, shoes, fashion, accessories, bags, jewelry, watches (non-smart)
-  - Home decor: candles, vases, planters, wallpaper, lamps (non-smart), furniture, art
-  - Cosmetics, skincare, beauty products, fragrances
-  - Food, drinks, beverages, supplements, matcha, coffee beans, tea
-  - Pet supplies, toys, stationery, books
-  - Phone cases, screen protectors (too cheap/low-ticket)
-  - Yoga mats (non-smart), meditation cushions, basic fitness gear without electronics
+ABSOLUTELY FORBIDDEN (will be REJECTED):
+  - Marketplaces: Amazon, eBay, Etsy, Zalando, ASOS, Currys, MediaMarkt, Fnac, Coolblue, Bol.com, Otto, Notino
+  - Major brands: Zara, H&M, IKEA, Apple, Samsung, Dyson, iRobot, Nike, Adidas, COS, & Other Stories
 
 CRITICAL REQUIREMENTS — EVERY store must meet ALL:
 1. European: EU + UK, Switzerland, Norway
-2. Sells REAL tech/electronics devices (not accessories or lifestyle products)
-3. On SHOPIFY with open /products.json that returns 200 with products array
-4. Store MUST have 15+ products in /products.json
-5. NOT a marketplace (NOT Amazon, eBay, Currys, MediaMarkt, Fnac, Darty, El Corte Ingles, Boulanger, Expert, Coolblue)
-6. NOT a major brand (NOT Apple, Samsung, Dyson, iRobot, Roborock, Xiaomi, TP-Link direct)
-
-Think of DTC tech brands that built their own Shopify stores:
-- Robot vacuum startups (like Neato competitors, new brands)
-- Smart home gadget startups
-- Fitness tracker/smart ring startups
-- Gaming peripheral brands
-- Portable tech brands
-- Niche audio/speaker brands
+2. Young brand: founded/launched 2020 or later (check footer copyright, about page, or WHOIS)
+3. On SHOPIFY with /products.json that returns 200 with products array
+4. Store MUST have 20+ products in /products.json
+5. Currently trending: viral on TikTok or Instagram, growing traffic
+6. NOT a marketplace and NOT a major brand
 
 Return 20 stores as JSON:
-[{"name":"...","category":"robot vacuums & smart home","why_hyping":"...","link":"https://...","country":"Germany","platform":"Shopify"}]"""
+[{"name":"Brand Name","category":"exact category from list above","why_hyping":"Why it is trending RIGHT NOW (specific)","link":"https://shopify-store.com","country":"Germany","platform":"Shopify"}]
 
-PROMPT_STORES_RETRY = """URGENT RETRY. I need European Shopify stores selling ONLY electronics/tech devices.
+CRITICAL: Spread stores across as many DIFFERENT categories as possible. Do NOT give me 10 stores from the same category."""
 
-STRICT PRODUCT RULES — stores must sell products from these categories:
-- Robot vacuums, smart home sensors/bulbs/plugs/locks/thermostats
-- IP cameras, video doorbells, security systems
-- Smart kitchen appliances: blenders, air fryers, coffee makers
-- Smart watches, smart rings, fitness trackers, GPS watches
-- Gaming routers, mesh WiFi systems, networking gear
-- Portable projectors, Bluetooth speakers, power banks, dash cams
+PROMPT_STORES_RETRY = """URGENT RETRY. I need MORE European Shopify stores from DIFFERENT categories I haven't covered yet.
 
-FORBIDDEN (zero tolerance):
-- Clothing, shoes, bags, jewelry, fashion
-- Candles, decor, vases, furniture, art, wallpaper
-- Cosmetics, skincare, beauty, fragrances
-- Food, drinks, supplements, coffee, tea, matcha
-- Phone cases, screen protectors
-- Anything that is NOT electronics/tech
+I already have stores in these categories — DO NOT repeat them: {existing_categories}
+
+I NEED stores from ANY of these remaining categories:
+- Home decor & tableware (candles, ceramics, scandinavian decor, kitchenware)
+- Fashion & clothing (streetwear, minimalist, sustainable, swimwear)
+- Robot vacuums & smart home (sensors, bulbs, plugs, locks, thermostats)
+- IP cameras & security (wireless cameras, doorbells, alarm systems)
+- Sports electronics (smart watches, rings, fitness trackers, GPS watches)
+- Kitchen gadgets (blenders, air fryers, coffee makers, sous vide)
+- Portable tech (projectors, speakers, power banks, dash cams)
+- Beauty & skincare (indie cosmetics, skincare, hair tools)
+- Pet supplies (smart feeders, pet cameras, accessories)
+- Bags & accessories (backpacks, wallets, sunglasses)
+
+FORBIDDEN:
+- Marketplaces: Amazon, eBay, Etsy, Zalando, ASOS, Coolblue, Otto, Bol, Notino
+- Major brands: Zara, H&M, IKEA, Apple, Samsung, Dyson, Nike, Adidas
 
 REQUIREMENTS:
-1. Shopify store with /products.json returning 200 OK
-2. 15+ products in the JSON
-3. European (EU, UK, CH, NO)
-4. NOT behind Cloudflare (403)
-5. DIFFERENT stores than before
+1. Shopify with /products.json returning 200 OK, 20+ products
+2. European (EU, UK, CH, NO)
+3. Young brand (2020+)
+4. Currently trending on TikTok/Instagram
+5. DIFFERENT from previously found stores
 
 Return 20 stores: [{"name":"...","category":"...","why_hyping":"...","link":"https://...","country":"...","platform":"Shopify"}]"""
 
@@ -2074,15 +2121,12 @@ TECHNICAL REQUIREMENTS:
 FALLBACK_STORES: list[dict] = []  # Kept for compat; use FALLBACK_STORES_POOLS instead
 
 FALLBACK_STORES_POOLS: list[list[dict]] = [
-    # ── Pool 1: Smart Home & Robot Vacuums — Shopify tech stores ──
+    # ── Pool 1: Decor, Fashion, Smart Home, Security, Fitness, Kitchen, Tech ──
     [
         {
             "name": "Narwal",
             "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Робот-пылесос Narwal Freo с самоочисткой — TikTok обзоры 10M+ просмотров. "
-                "LiDAR-навигация, вибрация mop. Продажи +300% за год."
-            ),
+            "why_hyping": "Robot vacuum with self-cleaning station. TikTok reviews 10M+ views. LiDAR navigation, vibrating mop. Sales +300% YoY.",
             "link": "https://narwal.com",
             "country": "China/EU",
             "platform_detected": "Shopify",
@@ -2090,77 +2134,9 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
             "product_count": 0,
         },
         {
-            "name": "SwitchBot",
-            "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Умный дом — curtains, bulbs, hubs, sensors. TikTok 5M+ просмотров. "
-                "Микро-роботы для автоматизации. 50K+ юнитов/мес."
-            ),
-            "link": "https://switch-bot.com",
-            "country": "China/EU",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Aqara",
-            "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Умный дом — датчики, розетки, моторы для штор, камеры. "
-                "YouTube/TikTok обзоры. Ecosystem с Zigbee/Matter. 20K+ заказов/мес."
-            ),
-            "link": "https://aqara.eu",
-            "country": "Germany",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Eufy (Anker)",
-            "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Роботы-пылесосы и смарт-камеры Anker. Viral unboxing на TikTok. "
-                "Бесшумные роботы с самоочисткой. 100K+ продаж/мес."
-            ),
-            "link": "https://eufy.com",
-            "country": "Germany",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Tapo by TP-Link",
-            "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Датчики, лампочки, камеры, розетки TP-Link Tapo. "
-                "Бюджетный умный дом с TikTok-хайпом. 30K+ юнитов/мес."
-            ),
-            "link": "https://tp-link.com/eu",
-            "country": "Netherlands",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Roborock EU",
-            "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Премиум роботы-пылесосы с LiDAR. TikTok 8M+ обзоров. "
-                "Моппинг, самоочистка, 3D mapping. Продажи +500%."
-            ),
-            "link": "https://roborock.com/eu",
-            "country": "China/EU",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
             "name": "Reolink",
-            "category": "IP cameras & security",
-            "why_hyping": (
-                "WiFi камеры и системы безопасности. TikTok unboxing 2M+. "
-                "5MP/8MP, colour night vision, person detection. 15K+ продаж/мес."
-            ),
+            "category": "IP cameras & security systems",
+            "why_hyping": "WiFi security cameras with colour night vision. TikTok unboxing 2M+ views. 5MP/8MP, person detection AI. 15K+ sales/month.",
             "link": "https://reolink.com",
             "country": "China/EU",
             "platform_detected": "Shopify",
@@ -2168,54 +2144,9 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
             "product_count": 0,
         },
         {
-            "name": "Ezviz",
-            "category": "IP cameras & security",
-            "why_hyping": (
-                "Умные камеры и видеодомофоны. TikTok security reviews 1M+. "
-                "Hikvision subsidiary, доступные цены. 25K+ продаж/мес."
-            ),
-            "link": "https://ezviz.com/eu",
-            "country": "China/EU",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-    ],
-    # ── Pool 2: Kitchen Electronics & Fitness Tech — Shopify tech stores ──
-    [
-        {
-            "name": "Ninja Kitchen EU",
-            "category": "kitchen electronics",
-            "why_hyping": (
-                "Электроника для кухни — блендеры, фритюрницы, грили. "
-                "TikTok cooking videos 20M+. Viral air fryer reviews. 200K+ продаж/мес."
-            ),
-            "link": "https://ninjakitchen.eu",
-            "country": "UK",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Sage Appliances",
-            "category": "kitchen electronics",
-            "why_hyping": (
-                "Умные кофемашины, тостеры, блендеры. TikTok 3M+ обзоров. "
-                "Premium kitchen tech. 50K+ продаж/мес в EU."
-            ),
-            "link": "https://sageappliances.com",
-            "country": "UK/Australia",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
             "name": "Oura Ring",
             "category": "sports & fitness electronics",
-            "why_hyping": (
-                "Умное кольцо Oura Ring Gen 3. TikTok 500M+ просмотров. "
-                "Трекинг сна, HRV, температуры. Продажи +400%."
-            ),
+            "why_hyping": "Smart ring Gen 3 for sleep/HRV tracking. TikTok 500M+ views. Viral among health enthusiasts. Sales +400% YoY.",
             "link": "https://ouraring.com",
             "country": "Finland/US",
             "platform_detected": "Shopify",
@@ -2223,80 +2154,19 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
             "product_count": 0,
         },
         {
-            "name": "Whoop",
-            "category": "sports & fitness electronics",
-            "why_hyping": (
-                "Фитнес-трекер с подписочной моделью. Viral на TikTok среди атлетов. "
-                "HRV, recovery, strain monitoring. 100K+ подписчиков."
-            ),
-            "link": "https://whoop.com",
-            "country": "US/EU",
+            "name": "Ninja Kitchen EU",
+            "category": "kitchen electronics & gadgets",
+            "why_hyping": "Kitchen electronics — blenders, air fryers, grills. TikTok cooking 20M+ views. Viral air fryer reviews. 200K+ sales/month.",
+            "link": "https://ninjakitchen.eu",
+            "country": "UK",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
-        {
-            "name": "Coros",
-            "category": "sports & fitness electronics",
-            "why_hyping": (
-                "GPS sport watches для бегунов. TikTok running community 2M+. "
-                "14 дней батареи, точный GPS. 15K+ продаж/мес."
-            ),
-            "link": "https://coros.com",
-            "country": "China/EU",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "ASUS ROG EU",
-            "category": "networking equipment",
-            "why_hyping": (
-                "Игровые роутеры и mesh-системы. TikTok gaming setups 5M+. "
-                "ROG Rapture GT-AX6000, AiMesh. 20K+ продаж/мес."
-            ),
-            "link": "https://rog.asus.com",
-            "country": "Taiwan/EU",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Deco by TP-Link",
-            "category": "networking equipment",
-            "why_hyping": (
-                "Mesh WiFi системы Deco. TikTok smart home setups 3M+. "
-                "WiFi 6/7, coverage 500m2. 30K+ юнитов/мес."
-            ),
-            "link": "https://tp-link.com/deco",
-            "country": "Netherlands",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-        {
-            "name": "Synology",
-            "category": "networking equipment",
-            "why_hyping": (
-                "NAS и сетевое хранение. YouTube/TikTok homelab 10M+. "
-                "Media server, surveillance, backup. 15K+ продаж/мес."
-            ),
-            "link": "https://synology.com",
-            "country": "Taiwan/EU",
-            "platform_detected": "Shopify",
-            "parse_status": "",
-            "product_count": 0,
-        },
-    ],
-    # ── Pool 3: Portable Electronics & Niche Tech — Shopify tech stores ──
-    [
         {
             "name": "Anker EU",
-            "category": "portable electronics",
-            "why_hyping": (
-                "Пауэрбанки, колонки, кабели, проекторы. TikTok tech reviews 50M+. "
-                "Nebula проекторы, Soundcore колонки. 500K+ продаж/мес."
-            ),
+            "category": "portable tech & gadgets",
+            "why_hyping": "Power banks, speakers, cables, projectors. TikTok tech reviews 50M+. Nebula projectors, Soundcore speakers. 500K+ sales/month.",
             "link": "https://anker.com",
             "country": "China/EU",
             "platform_detected": "Shopify",
@@ -2304,25 +2174,52 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
             "product_count": 0,
         },
         {
-            "name": "Wemo",
+            "name": "Skagerak",
+            "category": "home decor & tableware",
+            "why_hyping": "Scandinavian home decor and tableware. Viral on Instagram for minimalist Nordic aesthetic. Growing EU D2C presence.",
+            "link": "https://skagerak.dk",
+            "country": "Denmark",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Aclens",
+            "category": "fashion & clothing",
+            "why_hyping": "Young European streetwear brand. Growing fast on TikTok and Instagram. D2C model with bold designs. 10K+ orders/month.",
+            "link": "https://aclens.com",
+            "country": "France",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Coros",
+            "category": "sports & fitness electronics",
+            "why_hyping": "GPS sport watches for runners. TikTok running community 2M+. 14-day battery, precise GPS. 15K+ sales/month.",
+            "link": "https://coros.com",
+            "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+    ],
+    # ── Pool 2: Alternative stores across diverse categories ──
+    [
+        {
+            "name": "Aqara",
             "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Умные розетки, диммеры, датчики движения Belkin. "
-                "TikTok smart home tours 1M+. Matter/HomeKit совместимые."
-            ),
-            "link": "https://wemo.com",
-            "country": "US/EU",
+            "why_hyping": "Smart home — sensors, plugs, curtain motors, cameras. TikTok/YouTube reviews. Zigbee/Matter ecosystem. 20K+ orders/month.",
+            "link": "https://aqara.eu",
+            "country": "Germany",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
         {
             "name": "Arlo EU",
-            "category": "IP cameras & security",
-            "why_hyping": (
-                "Беспроводные камеры безопасности с аккумулятором. TikTok 3M+. "
-                "AI person detection, colour night vision. 40K+ продаж/мес."
-            ),
+            "category": "IP cameras & security systems",
+            "why_hyping": "Wireless security cameras with battery. TikTok 3M+ views. AI person detection, colour night vision. 40K+ sales/month.",
             "link": "https://arlo.com",
             "country": "US/EU",
             "platform_detected": "Shopify",
@@ -2330,14 +2227,51 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
             "product_count": 0,
         },
         {
-            "name": "MagSafe magnets EU",
-            "category": "portable electronics",
-            "why_hyping": (
-                "Портативные колонки с MagSafe, зарядки, проекторы. "
-                "TikTok unboxing 5M+. Компактные гаджеты для Apple. 20K+ продаж/мес."
-            ),
-            "link": "https://mag-safe.eu",
-            "country": "Netherlands",
+            "name": "Whoop",
+            "category": "sports & fitness electronics",
+            "why_hyping": "Fitness tracker with subscription model. Viral on TikTok among athletes. HRV, recovery, strain monitoring. 100K+ subscribers.",
+            "link": "https://whoop.com",
+            "country": "US/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Sage Appliances",
+            "category": "kitchen electronics & gadgets",
+            "why_hyping": "Smart coffee machines, toasters, blenders. TikTok 3M+ reviews. Premium kitchen tech. 50K+ sales/month in EU.",
+            "link": "https://sageappliances.com",
+            "country": "UK/Australia",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Sonos EU",
+            "category": "portable tech & gadgets",
+            "why_hyping": "WiFi speakers and home cinema. TikTok audio setups 5M+. Portability, multi-room, Dolby Atmos. 30K+ sales/month.",
+            "link": "https://sonos.com",
+            "country": "US/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Normann Copenhagen",
+            "category": "home decor & tableware",
+            "why_hyping": "Iconic Danish design brand. Viral on Instagram and Pinterest for sculptural homeware. EU D2C expansion ongoing.",
+            "link": "https://normann-copenhagen.com",
+            "country": "Denmark",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Les Benjamins",
+            "category": "fashion & clothing",
+            "why_hyping": "Parisian streetwear brand with global TikTok hype. Bold prints, oversized fits. Growing D2C with 15K+ orders/month.",
+            "link": "https://lesbenjamins.com",
+            "country": "France",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
@@ -2345,25 +2279,62 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
         {
             "name": "Garmin EU",
             "category": "sports & fitness electronics",
-            "why_hyping": (
-                "Спортивные часы и GPS-трекеры. TikTok fitness 8M+. "
-                "Forerunner, Fenix, Venu. Мульти-спорт. 60K+ продаж/мес."
-            ),
+            "why_hyping": "Sports watches and GPS trackers. TikTok fitness 8M+. Forerunner, Fenix, Venu. Multi-sport. 60K+ sales/month.",
             "link": "https://garmin.com",
             "country": "Switzerland/EU",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
         },
+    ],
+    # ── Pool 3: More diverse stores ──
+    [
         {
-            "name": "Xiaomi EU",
+            "name": "SwitchBot",
             "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Роботы-пылесосы, увлажнители,空气净化器, проекторы. "
-                "TikTok tech 100M+. Бюджетные смарт-устройства. 300K+ продаж/мес."
-            ),
-            "link": "https://mi.com/eu",
+            "why_hyping": "Smart home — curtains, bulbs, hubs, sensors. TikTok 5M+ views. Micro-robots for home automation. 50K+ units/month.",
+            "link": "https://switch-bot.com",
             "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Ezviz",
+            "category": "IP cameras & security systems",
+            "why_hyping": "Smart cameras and video doorbells. TikTok security reviews 1M+. Hikvision subsidiary, affordable. 25K+ sales/month.",
+            "link": "https://ezviz.com/eu",
+            "country": "China/EU",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Georg Jensen",
+            "category": "home decor & tableware",
+            "why_hyping": "Luxury Scandinavian design — home accessories, tableware. Strong Instagram presence in EU. Premium D2C with growing online sales.",
+            "link": "https://georgjensen.com",
+            "country": "Denmark",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Pangaia",
+            "category": "fashion & clothing",
+            "why_hyping": "Sustainable materials fashion brand. Viral on TikTok for bio-based fabrics. D2C with 30K+ orders/month. Growing EU presence.",
+            "link": "https://pangaia.com",
+            "country": "UK",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "MagSafe magnets EU",
+            "category": "portable tech & gadgets",
+            "why_hyping": "MagSafe portable speakers, chargers, projectors. TikTok unboxing 5M+. Compact Apple gadgets. 20K+ sales/month.",
+            "link": "https://mag-safe.eu",
+            "country": "Netherlands",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
@@ -2371,10 +2342,7 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
         {
             "name": "Netatmo",
             "category": "robot vacuums & smart home",
-            "why_hyping": (
-                "Французский умный дом — камеры, термостаты, датчики погоды. "
-                "TikTok smart home EU 2M+. Design-oriented. 10K+ продаж/мес."
-            ),
+            "why_hyping": "French smart home — cameras, thermostats, weather sensors. TikTok smart home EU 2M+. Design-oriented. 10K+ sales/month.",
             "link": "https://netatmo.com",
             "country": "France",
             "platform_detected": "Shopify",
@@ -2382,14 +2350,21 @@ FALLBACK_STORES_POOLS: list[list[dict]] = [
             "product_count": 0,
         },
         {
-            "name": "Sonos EU",
-            "category": "portable electronics",
-            "why_hyping": (
-                "WiFi колонки и home cinema. TikTok audio setups 5M+. "
-                "Portability, multi-room, Dolby Atmos. 30K+ продаж/мес."
-            ),
-            "link": "https://sonos.com",
-            "country": "US/EU",
+            "name": "Deco by TP-Link",
+            "category": "portable tech & gadgets",
+            "why_hyping": "Mesh WiFi systems Deco. TikTok smart home setups 3M+. WiFi 6/7, coverage 500m2. 30K+ units/month.",
+            "link": "https://tp-link.com/deco",
+            "country": "Netherlands",
+            "platform_detected": "Shopify",
+            "parse_status": "",
+            "product_count": 0,
+        },
+        {
+            "name": "Noodz",
+            "category": "fashion & clothing",
+            "why_hyping": "Young European basics brand. Viral on TikTok for premium quality at fair price. D2C model, 20K+ orders/month EU.",
+            "link": "https://noodz.co",
+            "country": "Germany",
             "platform_detected": "Shopify",
             "parse_status": "",
             "product_count": 0,
